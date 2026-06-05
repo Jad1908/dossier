@@ -1,0 +1,17 @@
+# ctxforge spec — see README for the full schema.
+
+[output]
+copy = true
+stdout = true
+file = ""
+
+[[section]]
+type = "tree"
+title = "PROJECT STRUCTURE"
+max_depth = 0
+use_gitignore = true
+
+[[section]]
+type = "text"
+title = "REQUEST"
+body = "Describe what you want the assistant to do here."
