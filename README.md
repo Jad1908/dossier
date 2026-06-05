@@ -119,7 +119,7 @@ file = ""              # if non-empty, write forged prompt to this path
 [[section]]
 type = "tree"
 title = "PROJECT STRUCTURE"
-max_depth = 0          # 0 (or -1) = unlimited
+max_depth = -1         # -1 = unlimited; 0 = root only; N = descend N levels
 use_gitignore = true   # honor the repo's .gitignore in addition to default skips
 
 [[section]]
@@ -139,7 +139,7 @@ body = "Define a features_names.py schema and update the training config."
 |--------|-----------------|----------|
 | `text` | `title`, `body` | Inlines `body` verbatim. For freeform sections (CONTEXT, REQUEST, SYSTEM INSTRUCTIONS). |
 | `file` | `title`, `path` | **Reads the file's text** and inlines it. The path is a source to read, not a file to attach. Whole file only. |
-| `tree` | `title`         | Generates an ASCII tree of the repo. Optional: `max_depth` (default 0 = unlimited), `use_gitignore` (default true). |
+| `tree` | `title`         | Generates an ASCII tree of the repo. Optional: `max_depth` (default `-1` = unlimited; `0` = root only; `N` = descend N levels), `use_gitignore` (default true). |
 
 The tree always skips: `.git`, `__pycache__`, `.venv`, `venv`, `node_modules`,
 `.mypy_cache`, `.pytest_cache`, `.ruff_cache`, `.idea`, `.vscode`, `dist`,

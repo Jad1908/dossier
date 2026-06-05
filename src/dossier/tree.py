@@ -38,19 +38,20 @@ def _load_gitignore(root: Path) -> pathspec.PathSpec | None:
 
 
 def _is_unlimited(max_depth: int) -> bool:
-    # Schema default 0 means unlimited; -1 is also accepted as unlimited.
-    return max_depth <= 0
+    # -1 (or any negative) means unlimited; 0 = root only; N = N levels.
+    return max_depth < 0
 
 
 def build_tree(
     root: Path,
-    max_depth: int = 0,
+    max_depth: int = -1,
     use_gitignore: bool = True,
 ) -> str:
     """Return a clean ASCII tree of `root`.
 
     Directories before files, alphabetically sorted within each group.
-    `max_depth <= 0` means unlimited.
+    `max_depth < 0` means unlimited; `0` shows only the root; `N` descends N
+    levels.
     """
     root = root.resolve()
     spec = _load_gitignore(root) if use_gitignore else None

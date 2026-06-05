@@ -37,8 +37,8 @@ class FileSection(_SectionBase):
 
 class TreeSection(_SectionBase):
     type: Literal["tree"]
-    # 0 = unlimited (per schema default); -1 is also treated as unlimited.
-    max_depth: int = 0
+    # -1 = unlimited (the default). 0 = root only; N = descend N levels.
+    max_depth: int = -1
     use_gitignore: bool = True
 
 

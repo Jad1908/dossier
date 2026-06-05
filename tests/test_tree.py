@@ -31,6 +31,17 @@ def test_max_depth_limits_descent(sample_repo: Path):
     assert "app.py" not in out
 
 
+def test_max_depth_negative_is_unlimited(sample_repo: Path):
+    out = build_tree(sample_repo, max_depth=-1, use_gitignore=True)
+    assert "src" in out
+    assert "app.py" in out  # descends fully
+
+
+def test_max_depth_zero_shows_root_only(sample_repo: Path):
+    out = build_tree(sample_repo, max_depth=0, use_gitignore=True)
+    assert out.splitlines() == [sample_repo.name]  # nothing below root
+
+
 def test_dirs_before_files_and_sorted(sample_repo: Path):
     out = build_tree(sample_repo, use_gitignore=True)
     lines = out.splitlines()
