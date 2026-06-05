@@ -1,4 +1,4 @@
-from ctxforge.tokens import count_tokens
+from dossier.tokens import count_tokens
 
 
 def test_empty_is_zero():

@@ -1,4 +1,4 @@
-# ctxforge
+# dossier
 
 Assemble a **structured text prompt** out of pieces of a local codebase, so you
 can hand rich, deliberate context to an AI chat (Claude, ChatGPT) without
@@ -6,7 +6,7 @@ rebuilding the same prompt by hand every time.
 
 The core idea: **the prompt is defined by a declarative spec file, not by
 in-memory selections.** You write a `context.toml` describing the sections you
-want; ctxforge reads the *current* state of the repo and renders the prompt.
+want; dossier reads the *current* state of the repo and forges the prompt.
 When code changes, re-running regenerates the prompt against reality — the spec
 never goes stale silently.
 
@@ -21,20 +21,20 @@ Requires Python `>=3.11` and [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync
-uv run ctxforge --help
+uv run dossier --help
 ```
 
-`uv run` resolves against this project's `.venv`, so the `ctxforge` command only
+`uv run` resolves against this project's `.venv`, so the `dossier` command only
 works from inside this directory. To use the tool in *other* projects, install
 it globally (below).
 
 ### As a global CLI (use it in any project)
 
-Install ctxforge as a standalone tool on your PATH with `uv tool install`. Point
-it at this repo (clone it first, or use the path/URL directly):
+Install dossier as a standalone tool on your PATH with `uv tool install`. Point
+it at the repo (clone it first, or use the URL directly):
 
 ```bash
-# From a local clone:
+# From a local clone (the repo dir is named "ctxforge"):
 uv tool install --editable /path/to/ctxforge
 
 # Or straight from GitHub:
@@ -42,22 +42,22 @@ uv tool install "git+https://github.com/Jad1908/ctxforge.git"
 ```
 
 `--editable` tracks your local source so code changes take effect without
-reinstalling — drop it to pin a frozen copy. If the `ctxforge` command isn't
+reinstalling — drop it to pin a frozen copy. If the `dossier` command isn't
 found afterward, run `uv tool update-shell` once and restart your shell.
 
-Now `ctxforge` is available from any directory:
+Now `dossier` is available from any directory:
 
 ```bash
 cd ~/some/other/project
-ctxforge init        # writes a context.toml in THIS project
-ctxforge render      # renders + copies the prompt to your clipboard
+dossier init         # writes a context.toml in THIS project
+dossier forge        # forges + copies the prompt to your clipboard
 ```
 
 To upgrade or remove the global install later:
 
 ```bash
-uv tool upgrade ctxforge
-uv tool uninstall ctxforge
+uv tool upgrade dossier
+uv tool uninstall dossier
 ```
 
 ### Without installing (one-off)
@@ -65,7 +65,7 @@ uv tool uninstall ctxforge
 `uvx` runs it from source against any target directory via `--root`, no install:
 
 ```bash
-uvx --from /path/to/ctxforge ctxforge render --root ~/some/other/project
+uvx --from /path/to/ctxforge dossier forge --root ~/some/other/project
 ```
 
 ## Usage
@@ -74,20 +74,20 @@ Once installed globally, run it from any project root (omit `uv run` if you used
 `uv tool install`):
 
 ```bash
-ctxforge init      # writes a starter context.toml (won't overwrite)
-ctxforge render    # renders the prompt from context.toml
+dossier init       # writes a starter context.toml (won't overwrite)
+dossier forge      # forges the prompt from context.toml
 ```
 
 ### Using it in another repo
 
-1. `cd` into the target project and run `ctxforge init`.
+1. `cd` into the target project and run `dossier init`.
 2. Edit that project's `context.toml`: add a `tree` section for structure,
    `file` sections pointing at the specific files you want the model to see
    (paths are relative to that project's root), and a `text` REQUEST describing
    the task.
-3. Run `ctxforge render` — the prompt is copied to your clipboard. Paste it into
+3. Run `dossier forge` — the prompt is copied to your clipboard. Paste it into
    Claude / ChatGPT.
-4. Commit `context.toml` so the prompt is reproducible. Re-render any time the
+4. Commit `context.toml` so the prompt is reproducible. Re-forge any time the
    code changes; the spec renders against the *current* state of the repo.
 
 Global options on every command:
@@ -95,11 +95,11 @@ Global options on every command:
 - `--root PATH` — repo root (defaults to the current working directory).
 - `--spec PATH` — spec path (defaults to `<root>/context.toml`).
 
-`render` flags override the `[output]` block in the spec:
+`forge` flags override the `[output]` block in the spec:
 
-- `--copy / --no-copy` — copy the rendered prompt to the clipboard.
-- `--stdout / --no-stdout` — print the rendered prompt to stdout.
-- `--out PATH` — write the rendered prompt to a file.
+- `--copy / --no-copy` — copy the forged prompt to the clipboard.
+- `--stdout / --no-stdout` — print the forged prompt to stdout.
+- `--out PATH` — write the forged prompt to a file.
 
 A token estimate is printed to **stderr** so stdout stays clean for piping.
 
@@ -111,9 +111,9 @@ the repo root**.
 ```toml
 # Optional. If omitted, these defaults apply.
 [output]
-copy = true            # copy rendered prompt to clipboard
-stdout = true          # also print rendered prompt to stdout
-file = ""              # if non-empty, write rendered prompt to this path
+copy = true            # copy forged prompt to clipboard
+stdout = true          # also print forged prompt to stdout
+file = ""              # if non-empty, write forged prompt to this path
 
 # Sections render in the order listed.
 [[section]]
@@ -157,12 +157,12 @@ Each section renders as:
 ```
 
 Sections are joined by a single blank line. This format is **round-trippable**:
-the rendered text can be parsed back into `(name, type, body)` records.
+the forged text can be parsed back into `(name, type, body)` records.
 
 ### Missing `file` paths = hard fail
 
-Before rendering, every `type = "file"` path is checked. If any is missing,
-ctxforge prints **all** missing paths and exits non-zero **without producing
+Before forging, every `type = "file"` path is checked. If any is missing,
+dossier prints **all** missing paths and exits non-zero **without producing
 output**. This turns silent spec drift into a signal instead of a stale prompt.
 
 ## Known limitation

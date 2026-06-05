@@ -128,7 +128,7 @@ wheels = [
 ]
 
 [[package]]
-name = "ctxforge"
+name = "dossier"
 version = "0.0.0"
 source = { editable = "." }
 dependencies = [

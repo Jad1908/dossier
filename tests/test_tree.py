@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from ctxforge.tree import build_tree
+from dossier.tree import build_tree
 
 
 def test_default_skips_and_gitignore(sample_repo: Path):

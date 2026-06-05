@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from ctxforge.render import MissingPathsError, check_missing_paths, render
-from ctxforge.spec import FileSection, Spec, TextSection, TreeSection
+from dossier.render import MissingPathsError, check_missing_paths, render
+from dossier.spec import FileSection, Spec, TextSection, TreeSection
 
 
 def test_render_format(sample_repo: Path):

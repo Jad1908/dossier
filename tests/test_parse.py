@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from ctxforge.parse import ParsedSection, parse
-from ctxforge.render import render
-from ctxforge.spec import Spec, TextSection
+from dossier.parse import ParsedSection, parse
+from dossier.render import render
+from dossier.spec import Spec, TextSection
 
 
 def test_parse_basic():

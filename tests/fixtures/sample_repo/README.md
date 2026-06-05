@@ -1,3 +1,3 @@
 # sample repo
 
-A tiny fixture repo for ctxforge tests.
+A tiny fixture repo for dossier tests.

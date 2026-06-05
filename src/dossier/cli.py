@@ -1,4 +1,4 @@
-"""typer CLI: `ctxforge init` and `ctxforge render` (roadmap §9).
+"""typer CLI: `dossier init` and `dossier forge`.
 
 I/O lives here (file reads at the edges, clipboard, stdout/stderr); the
 render/parse/tree logic stays pure and testable.
@@ -23,7 +23,7 @@ app = typer.Typer(
 )
 
 _STARTER_SPEC = """\
-# ctxforge spec — see README for the full schema.
+# dossier spec — see README for the full schema.
 
 [output]
 copy = true
@@ -71,7 +71,7 @@ def init(
 
 
 @app.command()
-def render(
+def forge(
     root: Path = typer.Option(
         Path.cwd(), "--root", help="Repo root (defaults to cwd)."
     ),
@@ -88,7 +88,7 @@ def render(
         None, "--out", help="Write rendered prompt to this path."
     ),
 ) -> None:
-    """Render the prompt from the spec."""
+    """Forge the prompt from the spec."""
     spec_path = _spec_path(root, spec)
 
     try:

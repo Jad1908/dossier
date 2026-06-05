@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from ctxforge.spec import (
+from dossier.spec import (
     FileSection,
     SpecError,
     TextSection,
