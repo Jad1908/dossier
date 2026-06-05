@@ -47,21 +47,34 @@ def _err(message: str) -> None:
     typer.echo(message, err=True)
 
 
-def _spec_path(root: Path, spec: Optional[Path]) -> Path:
-    return spec if spec is not None else root / "context.toml"
+def _spec_path(root: Path, spec: Optional[Path], name: Optional[str]) -> Path:
+    """Resolve which spec file to use.
+
+    Precedence: an explicit --spec path wins; otherwise a positional NAME maps
+    to context.<name>.toml; otherwise the default context.toml.
+    """
+    if spec is not None:
+        return spec
+    if name:
+        return root / f"context.{name}.toml"
+    return root / "context.toml"
 
 
 @app.command()
 def init(
+    name: Optional[str] = typer.Argument(
+        None,
+        help="Spec name; writes context.<name>.toml (default: context.toml).",
+    ),
     root: Path = typer.Option(
         Path.cwd(), "--root", help="Repo root (defaults to cwd)."
     ),
     spec: Optional[Path] = typer.Option(
-        None, "--spec", help="Spec path (defaults to <root>/context.toml)."
+        None, "--spec", help="Explicit spec path (overrides NAME)."
     ),
 ) -> None:
-    """Write a starter context.toml. Refuses to overwrite an existing one."""
-    target = _spec_path(root, spec)
+    """Write a starter context spec. Refuses to overwrite an existing one."""
+    target = _spec_path(root, spec, name)
     if target.exists():
         _err(f"refusing to overwrite existing spec: {target}")
         raise typer.Exit(code=1)
@@ -72,11 +85,15 @@ def init(
 
 @app.command()
 def forge(
+    name: Optional[str] = typer.Argument(
+        None,
+        help="Spec name; reads context.<name>.toml (default: context.toml).",
+    ),
     root: Path = typer.Option(
         Path.cwd(), "--root", help="Repo root (defaults to cwd)."
     ),
     spec: Optional[Path] = typer.Option(
-        None, "--spec", help="Spec path (defaults to <root>/context.toml)."
+        None, "--spec", help="Explicit spec path (overrides NAME)."
     ),
     copy: Optional[bool] = typer.Option(
         None, "--copy/--no-copy", help="Copy rendered prompt to clipboard."
@@ -89,7 +106,7 @@ def forge(
     ),
 ) -> None:
     """Forge the prompt from the spec."""
-    spec_path = _spec_path(root, spec)
+    spec_path = _spec_path(root, spec, name)
 
     try:
         loaded = load_spec(spec_path)

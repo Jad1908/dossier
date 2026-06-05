@@ -78,6 +78,26 @@ dossier init       # writes a starter context.toml (won't overwrite)
 dossier forge      # forges the prompt from context.toml
 ```
 
+### Multiple specs in one folder
+
+Both commands take an optional positional `NAME` so you can keep several specs
+side by side. A name maps to `context.<name>.toml`; with no name, the default
+`context.toml` is used:
+
+```bash
+dossier init auth        # writes context.auth.toml
+dossier forge auth       # forges from context.auth.toml
+dossier forge            # forges from context.toml
+
+# folder:
+#   context.toml
+#   context.auth.toml
+#   context.api.toml
+```
+
+For a one-off file outside that convention, `--spec PATH` takes an explicit
+path and overrides `NAME`.
+
 ### Using it in another repo
 
 1. `cd` into the target project and run `dossier init`.
