@@ -34,11 +34,11 @@ Install dossier as a standalone tool on your PATH with `uv tool install`. Point
 it at the repo (clone it first, or use the URL directly):
 
 ```bash
-# From a local clone (the repo dir is named "ctxforge"):
-uv tool install --editable /path/to/ctxforge
+# From a local clone:
+uv tool install --editable /path/to/dossier
 
 # Or straight from GitHub:
-uv tool install "git+https://github.com/Jad1908/ctxforge.git"
+uv tool install "git+https://github.com/Jad1908/dossier.git"
 ```
 
 `--editable` tracks your local source so code changes take effect without
@@ -65,7 +65,7 @@ uv tool uninstall dossier
 `uvx` runs it from source against any target directory via `--root`, no install:
 
 ```bash
-uvx --from /path/to/ctxforge dossier forge --root ~/some/other/project
+uvx --from /path/to/dossier dossier forge --root ~/some/other/project
 ```
 
 ## Usage
