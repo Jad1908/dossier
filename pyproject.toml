@@ -3,6 +3,8 @@ name = "dossier"
 version = "0.0.0"
 description = "Assemble a structured text prompt from a local codebase via a declarative spec."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
     "typer>=0.12",
