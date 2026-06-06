@@ -7,9 +7,13 @@ These produce the *inner content* of a section. Wrapping each in the
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .spec import FileSection, Section, TextSection, TreeSection
 from .tree import build_tree
+
+if TYPE_CHECKING:
+    from .render import RenderContext
 
 
 class MissingFileError(Exception):
@@ -20,14 +24,24 @@ class MissingFileError(Exception):
         super().__init__(path)
 
 
-def render_section_content(section: Section, root: Path) -> str:
+class MissingPromptError(Exception):
+    """Raised when a `text` section references an unknown prompt name."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        super().__init__(name)
+
+
+def render_section_content(
+    section: Section, root: Path, ctx: "RenderContext"
+) -> str:
     """Render the inner content for a single section.
 
-    May raise MissingFileError for `file` sections with a missing path; the
-    assembler collects these for the hard-fail check.
+    May raise MissingFileError / MissingPromptError; the assembler collects
+    these for the hard-fail checks.
     """
     if isinstance(section, TextSection):
-        return section.body
+        return _render_text(section, ctx)
     if isinstance(section, FileSection):
         return _render_file(section, root)
     if isinstance(section, TreeSection):
@@ -35,8 +49,19 @@ def render_section_content(section: Section, root: Path) -> str:
             root,
             max_depth=section.max_depth,
             use_gitignore=section.use_gitignore,
+            exclude=ctx.tree_exclude,
+            include=ctx.tree_include,
         )
     raise TypeError(f"unknown section type: {type(section).__name__}")
+
+
+def _render_text(section: TextSection, ctx: "RenderContext") -> str:
+    if section.body is not None:
+        return section.body
+    # Validated upstream: exactly one of body/prompt is set.
+    if section.prompt not in ctx.prompts:
+        raise MissingPromptError(section.prompt)
+    return ctx.prompts[section.prompt]
 
 
 def _render_file(section: FileSection, root: Path) -> str:

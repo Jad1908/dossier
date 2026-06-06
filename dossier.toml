@@ -1,0 +1,22 @@
+# dossier project config — applies across spec files in this folder.
+# All blocks are optional. See README ("Project config") for details.
+
+# Default output settings (a spec's own [output] overrides these; CLI flags
+# override both). Left commented so specs/flags decide:
+# [output]
+# copy = true
+# stdout = true
+# file = ""
+
+# Persistent tree filters. `exclude` skips extra globs; `include` force-shows
+# entries that default skips / .gitignore would drop. CLI --exclude/--include
+# augment these per run.
+# [tree]
+# exclude = ["docs", "*.snap"]
+# include = ["dist"]
+
+# Reusable prompts. Reference one from a text section with `prompt = "<name>"`
+# instead of an inline `body`.
+[prompts]
+refactor = "Refactor the code above for readability and clarity. Keep behavior identical and do not change public APIs."
+explain = "Explain what the code above does, step by step, and call out any bugs or edge cases you notice."

@@ -53,6 +53,29 @@ def test_dirs_before_files_and_sorted(sample_repo: Path):
     assert names.index("src") < names.index("README.md")
 
 
+def test_exclude_removes_dir(sample_repo: Path):
+    out = build_tree(sample_repo, exclude=["src"])
+    assert "src" not in out
+    assert "app.py" not in out
+    assert "README.md" in out  # untouched
+
+
+def test_exclude_glob(sample_repo: Path):
+    out = build_tree(sample_repo, use_gitignore=False, exclude=["*.log"])
+    assert "debug.log" not in out
+
+
+def test_include_overrides_gitignore(sample_repo: Path):
+    out = build_tree(sample_repo, use_gitignore=True, include=["ignored_by_git"])
+    assert "ignored_by_git" in out
+    assert "secret.txt" in out  # subtree revealed too
+
+
+def test_include_overrides_always_skip(sample_repo: Path):
+    out = build_tree(sample_repo, include=["__pycache__"])
+    assert "__pycache__" in out
+
+
 def test_deterministic(sample_repo: Path):
     assert build_tree(sample_repo) == build_tree(sample_repo)
 

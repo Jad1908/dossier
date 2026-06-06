@@ -115,13 +115,66 @@ Global options on every command:
 - `--root PATH` — repo root (defaults to the current working directory).
 - `--spec PATH` — spec path (defaults to `<root>/context.toml`).
 
-`forge` flags override the `[output]` block in the spec:
+`forge` flags override output settings:
 
 - `--copy / --no-copy` — copy the forged prompt to the clipboard.
 - `--stdout / --no-stdout` — print the forged prompt to stdout.
 - `--out PATH` — write the forged prompt to a file.
 
+…and the tree / config:
+
+- `--exclude PATTERN` — skip a dir/glob in the tree (repeatable).
+- `--include PATTERN` — force-show a dir/glob the default skips would drop (repeatable).
+- `--config PATH` — use a specific config file (defaults to `<root>/dossier.toml`).
+
 A token estimate is printed to **stderr** so stdout stays clean for piping.
+
+## Project config (`dossier.toml`)
+
+An optional `dossier.toml` at the repo root holds defaults that apply across all
+your spec files in that folder. Every block is optional; if the file is absent,
+built-in defaults are used.
+
+```toml
+# Output defaults — a spec's own [output] overrides these; CLI flags override both.
+[output]
+copy = true
+stdout = true
+file = ""
+
+# Persistent tree filters. `exclude` adds skip patterns; `include` force-shows
+# entries that default skips / .gitignore would drop (and reveals their whole
+# subtree). Patterns are globs matched against each entry's name and its
+# repo-relative path. CLI --exclude / --include augment these for one run.
+[tree]
+exclude = ["docs", "*.snap"]
+include = ["dist"]
+
+# Reusable prompts, referenced from a text section by name.
+[prompts]
+refactor = "Refactor for readability; keep behavior identical."
+```
+
+### Injecting a stored prompt
+
+A `text` section takes **either** an inline `body` **or** a `prompt` that names
+an entry in `[prompts]` (exactly one of the two):
+
+```toml
+[[section]]
+type = "text"
+title = "REQUEST"
+prompt = "refactor"   # body is pulled from [prompts].refactor in dossier.toml
+```
+
+Referencing a prompt that isn't defined is a **hard fail** (lists the unknown
+names, no output), same as a missing `file` path.
+
+### Precedence
+
+- **Output:** CLI flags → spec `[output]` → config `[output]` → built-in defaults.
+- **Tree filters:** config `[tree]` and CLI `--include/--exclude` are combined;
+  `include` wins over `exclude` and over default skips / `.gitignore`.
 
 ## The spec file (`context.toml`)
 
@@ -157,7 +210,7 @@ body = "Define a features_names.py schema and update the training config."
 
 | type   | required fields | behavior |
 |--------|-----------------|----------|
-| `text` | `title`, `body` | Inlines `body` verbatim. For freeform sections (CONTEXT, REQUEST, SYSTEM INSTRUCTIONS). |
+| `text` | `title`, and one of `body` / `prompt` | Inlines `body` verbatim, or pulls a stored prompt by name (see [Project config](#project-config-dossiertoml)). For freeform sections (CONTEXT, REQUEST, SYSTEM INSTRUCTIONS). |
 | `file` | `title`, `path` | **Reads the file's text** and inlines it. The path is a source to read, not a file to attach. Whole file only. |
 | `tree` | `title`         | Generates an ASCII tree of the repo. Optional: `max_depth` (default `-1` = unlimited; `0` = root only; `N` = descend N levels), `use_gitignore` (default true). |
 

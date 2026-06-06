@@ -2,10 +2,24 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from pathlib import Path
 
-from .sections import MissingFileError, render_section_content
-from .spec import FileSection, Spec
+from .sections import MissingFileError, MissingPromptError, render_section_content
+from .spec import FileSection, Spec, TextSection
+
+
+@dataclass
+class RenderContext:
+    """Resolved inputs that sections need beyond the spec itself.
+
+    `prompts` is the [prompts] library from dossier.toml; `tree_exclude` /
+    `tree_include` are the effective tree filters (config + CLI combined).
+    """
+
+    prompts: dict[str, str] = field(default_factory=dict)
+    tree_exclude: list[str] = field(default_factory=list)
+    tree_include: list[str] = field(default_factory=list)
 
 
 class MissingPathsError(Exception):
@@ -14,6 +28,14 @@ class MissingPathsError(Exception):
     def __init__(self, paths: list[str]) -> None:
         self.paths = paths
         super().__init__("missing file paths: " + ", ".join(paths))
+
+
+class MissingPromptsError(Exception):
+    """Raised when `text` sections reference unknown prompt names."""
+
+    def __init__(self, names: list[str]) -> None:
+        self.names = names
+        super().__init__("missing prompts: " + ", ".join(names))
 
 
 def check_missing_paths(spec: Spec, root: Path) -> list[str]:
@@ -33,25 +55,43 @@ def check_missing_paths(spec: Spec, root: Path) -> list[str]:
     return missing
 
 
+def check_missing_prompts(spec: Spec, ctx: RenderContext) -> list[str]:
+    """Return every prompt name referenced by a `text` section but not defined
+    in the prompts library."""
+    return [
+        s.prompt
+        for s in spec.section
+        if isinstance(s, TextSection)
+        and s.prompt is not None
+        and s.prompt not in ctx.prompts
+    ]
+
+
 def _wrap(title: str, type_: str, content: str) -> str:
     return f'<section name="{title}" type="{type_}">\n{content}\n</section>'
 
 
-def render(spec: Spec, root: Path) -> str:
-    """Render the full prompt. Hard-fails (MissingPathsError) if any `file`
-    path is missing — collecting all missing paths first, no partial output.
+def render(spec: Spec, root: Path, ctx: RenderContext | None = None) -> str:
+    """Render the full prompt. Hard-fails (collecting all problems first, no
+    partial output) on missing `file` paths or unknown prompt references.
     """
+    ctx = ctx or RenderContext()
+
     missing = check_missing_paths(spec, root)
     if missing:
         raise MissingPathsError(missing)
+    missing_prompts = check_missing_prompts(spec, ctx)
+    if missing_prompts:
+        raise MissingPromptsError(missing_prompts)
 
     parts: list[str] = []
     for section in spec.section:
         try:
-            content = render_section_content(section, root)
-        except MissingFileError as exc:
-            # Should not happen after check_missing_paths, but stay safe.
+            content = render_section_content(section, root, ctx)
+        except MissingFileError as exc:  # safety net; checked above
             raise MissingPathsError([exc.path]) from exc
+        except MissingPromptError as exc:  # safety net; checked above
+            raise MissingPromptsError([exc.name]) from exc
         parts.append(_wrap(section.title, section.type, content))
 
     return "\n\n".join(parts)

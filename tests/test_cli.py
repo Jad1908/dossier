@@ -59,3 +59,66 @@ def test_forge_missing_named_spec_errors(tmp_path: Path):
     )
     assert result.exit_code == 1
     assert "context.nope.toml" in result.output
+
+
+def _spec(tmp_path: Path, body: str) -> None:
+    (tmp_path / "context.toml").write_text(body, encoding="utf-8")
+
+
+def test_config_output_default_suppresses_stdout(tmp_path: Path):
+    # Spec has no [output]; config turns stdout off.
+    _spec(tmp_path, '[[section]]\ntype="text"\ntitle="R"\nbody="hello"\n')
+    (tmp_path / "dossier.toml").write_text(
+        "[output]\nstdout = false\ncopy = false\n", encoding="utf-8"
+    )
+    result = runner.invoke(app, ["forge", "--root", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "hello" not in result.output  # prompt not printed
+    # CLI flag overrides config back on.
+    result2 = runner.invoke(
+        app, ["forge", "--root", str(tmp_path), "--stdout", "--no-copy"]
+    )
+    assert "hello" in result2.output
+
+
+def test_config_prompt_injection(tmp_path: Path):
+    _spec(tmp_path, '[[section]]\ntype="text"\ntitle="R"\nprompt="refactor"\n')
+    (tmp_path / "dossier.toml").write_text(
+        '[prompts]\nrefactor = "Refactor for readability."\n', encoding="utf-8"
+    )
+    result = runner.invoke(
+        app, ["forge", "--root", str(tmp_path), "--no-copy"]
+    )
+    assert result.exit_code == 0
+    assert "Refactor for readability." in result.output
+
+
+def test_config_missing_prompt_errors(tmp_path: Path):
+    _spec(tmp_path, '[[section]]\ntype="text"\ntitle="R"\nprompt="ghost"\n')
+    result = runner.invoke(
+        app, ["forge", "--root", str(tmp_path), "--no-copy"]
+    )
+    assert result.exit_code == 1
+    assert "ghost" in result.output
+
+
+def test_cli_exclude_and_include(tmp_path: Path):
+    (tmp_path / "keep").mkdir()
+    (tmp_path / "keep" / "a.py").write_text("x", encoding="utf-8")
+    (tmp_path / "drop").mkdir()
+    (tmp_path / "drop" / "b.py").write_text("x", encoding="utf-8")
+    _spec(tmp_path, '[[section]]\ntype="tree"\ntitle="T"\n')
+
+    result = runner.invoke(
+        app, ["forge", "--root", str(tmp_path), "--no-copy", "--exclude", "drop"]
+    )
+    assert "keep" in result.output and "drop" not in result.output
+
+    # __pycache__ is always skipped; --include forces it.
+    (tmp_path / "__pycache__").mkdir()
+    (tmp_path / "__pycache__" / "c.pyc").write_text("x", encoding="utf-8")
+    result2 = runner.invoke(
+        app,
+        ["forge", "--root", str(tmp_path), "--no-copy", "--include", "__pycache__"],
+    )
+    assert "__pycache__" in result2.output

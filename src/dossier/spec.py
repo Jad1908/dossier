@@ -9,9 +9,15 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    model_validator,
+)
 
 ALLOWED_TYPES = ("text", "file", "tree")
 
@@ -27,7 +33,18 @@ class _SectionBase(BaseModel):
 
 class TextSection(_SectionBase):
     type: Literal["text"]
-    body: str
+    # Exactly one of `body` (inline text) or `prompt` (a name resolved from
+    # the [prompts] table in dossier.toml) must be provided.
+    body: Optional[str] = None
+    prompt: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _exactly_one_source(self) -> "TextSection":
+        if (self.body is None) == (self.prompt is None):
+            raise ValueError(
+                "a text section needs exactly one of 'body' or 'prompt'"
+            )
+        return self
 
 
 class FileSection(_SectionBase):
@@ -94,6 +111,10 @@ def _raise_located(exc: ValidationError, raw_sections: list[dict]) -> None:
                 messages.append(
                     f"{label}: unexpected field {field!r} for type {stype!r}."
                 )
+            elif etype == "value_error":
+                # Whole-section rule (e.g. body/prompt mutual exclusion).
+                msg = err["msg"].removeprefix("Value error, ")
+                messages.append(f"{label}: {msg}.")
             else:
                 messages.append(f"{label}: field {field!r}: {err['msg']}.")
         else:
