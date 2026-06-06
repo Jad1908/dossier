@@ -1,227 +1,313 @@
 # dossier
 
-Assemble a **structured text prompt** out of pieces of a local codebase, so you
-can hand rich, deliberate context to an AI chat (Claude, ChatGPT) without
-rebuilding the same prompt by hand every time.
+Build deliberate, reproducible context for AI chats from your codebase.
 
-The core idea: **the prompt is defined by a declarative spec file, not by
-in-memory selections.** You write a `context.toml` describing the sections you
-want; dossier reads the *current* state of the repo and forges the prompt.
-When code changes, re-running regenerates the prompt against reality — the spec
-never goes stale silently.
+`dossier` assembles a structured text prompt out of pieces of a local
+repository — a file tree, the full text of specific files, and your own
+instructions — so you can hand rich context to an AI assistant (Claude, ChatGPT,
+and the like) without reassembling it by hand every time.
 
-This is a CLI engine. Optimize for reproducibility, transparency, and being
-diffable / commit-able.
+The prompt is defined by a declarative spec file, not by ad-hoc copy-paste. You
+describe the sections you want once in a `context.toml`; dossier reads the
+*current* state of the repo and renders the prompt. When the code changes,
+re-running regenerates the prompt against reality, so the context you send is
+never quietly out of date.
 
-## Install
+It is a small, transparent CLI. The output is plain text you can read, diff, and
+commit.
 
-Requires Python `>=3.11` and [`uv`](https://docs.astral.sh/uv/).
+## Contents
 
-### For local development (in this repo)
+- [Why dossier](#why-dossier)
+- [Quick start](#quick-start)
+- [Installation](#installation)
+- [The spec file](#the-spec-file)
+- [Project configuration](#project-configuration)
+- [Command reference](#command-reference)
+- [Output format](#output-format)
+- [Design notes and limitations](#design-notes-and-limitations)
+- [Development](#development)
+
+## Why dossier
+
+Pasting code into a chat is easy until you do it ten times a day. The same files,
+the same project layout, the same standing instructions — rebuilt by hand,
+slightly different each time, and stale the moment you edit a file.
+
+dossier treats your prompt context as a build artifact:
+
+- **Declarative.** A spec lists the sections you want. The tool resolves them
+  against the repo at render time.
+- **Reproducible.** The same repo and spec produce byte-identical output, so a
+  prompt can be regenerated and reviewed like any other generated file.
+- **Transparent.** The result is readable text with labelled sections — no
+  hidden state, no binary blobs.
+- **Honest about drift.** If a referenced file has moved or been deleted, the
+  render fails loudly instead of silently shipping a stale prompt.
+
+It is intentionally narrow: it selects and renders text. It does not call any
+model, attach files, or extract symbols.
+
+## Quick start
 
 ```bash
-uv sync
-uv run dossier --help
-```
-
-`uv run` resolves against this project's `.venv`, so the `dossier` command only
-works from inside this directory. To use the tool in *other* projects, install
-it globally (below).
-
-### As a global CLI (use it in any project)
-
-Install dossier as a standalone tool on your PATH with `uv tool install`. Point
-it at the repo (clone it first, or use the URL directly):
-
-```bash
-# From a local clone:
-uv tool install --editable /path/to/dossier
-
-# Or straight from GitHub:
+# Install once, globally (see Installation for alternatives).
 uv tool install "git+https://github.com/Jad1908/dossier.git"
+
+# In any project:
+cd ~/code/myapp
+dossier init        # writes a starter context.toml
+$EDITOR context.toml
+dossier forge       # renders the prompt and copies it to your clipboard
 ```
 
-`--editable` tracks your local source so code changes take effect without
-reinstalling — drop it to pin a frozen copy. If the `dossier` command isn't
-found afterward, run `uv tool update-shell` once and restart your shell.
+A `context.toml` like this:
 
-Now `dossier` is available from any directory:
+```toml
+[[section]]
+type = "tree"
+title = "PROJECT STRUCTURE"
+
+[[section]]
+type = "file"
+title = "AUTH MODULE"
+path = "src/app/auth.py"
+
+[[section]]
+type = "text"
+title = "REQUEST"
+body = "Add rate limiting to the login endpoint. Keep the existing API shape."
+```
+
+produces a prompt like this:
+
+```
+<section name="PROJECT STRUCTURE" type="tree">
+myapp
+├── src
+│   └── app
+│       ├── auth.py
+│       └── main.py
+└── pyproject.toml
+</section>
+
+<section name="AUTH MODULE" type="file">
+def login(username, password):
+    ...
+</section>
+
+<section name="REQUEST" type="text">
+Add rate limiting to the login endpoint. Keep the existing API shape.
+</section>
+```
+
+Paste it into your assistant of choice. Commit the `context.toml` so the prompt
+is reproducible, and re-run `dossier forge` whenever the code moves on.
+
+## Installation
+
+dossier requires Python 3.11 or newer and [uv](https://docs.astral.sh/uv/).
+
+### As a global command
+
+This is the recommended setup for day-to-day use across many projects:
 
 ```bash
-cd ~/some/other/project
-dossier init         # writes a context.toml in THIS project
-dossier forge        # forges + copies the prompt to your clipboard
+# Straight from GitHub:
+uv tool install "git+https://github.com/Jad1908/dossier.git"
+
+# Or from a local clone (use --editable to track your changes):
+uv tool install --editable /path/to/dossier
 ```
 
-To upgrade or remove the global install later:
+`dossier` is then available from any directory. If the command is not found
+afterwards, run `uv tool update-shell` once and restart your shell. To update or
+remove it later:
 
 ```bash
 uv tool upgrade dossier
 uv tool uninstall dossier
 ```
 
-### Without installing (one-off)
+### Without installing
 
-`uvx` runs it from source against any target directory via `--root`, no install:
-
-```bash
-uvx --from /path/to/dossier dossier forge --root ~/some/other/project
-```
-
-## Usage
-
-Once installed globally, run it from any project root (omit `uv run` if you used
-`uv tool install`):
+Run it on demand from a clone, pointing `--root` at the project you want to
+forge a prompt for:
 
 ```bash
-dossier init       # writes a starter context.toml (won't overwrite)
-dossier forge      # forges the prompt from context.toml
+uvx --from /path/to/dossier dossier forge --root ~/code/myapp
 ```
+
+### From a clone, for development
+
+```bash
+git clone https://github.com/Jad1908/dossier.git
+cd dossier
+uv sync
+uv run dossier --help
+```
+
+`uv run` resolves against the project's local environment, so the command works
+from inside the clone. Use the global install above to run it elsewhere.
+
+## The spec file
+
+A spec is a TOML file — `context.toml` by default — that lives at the root of the
+project you are describing. Every path inside it is relative to that root.
+Sections render in the order listed.
+
+```toml
+[[section]]
+type = "tree"
+title = "PROJECT STRUCTURE"
+max_depth = -1         # -1 = unlimited; 0 = root only; N = descend N levels
+use_gitignore = true   # also skip anything in the repo's root .gitignore
+
+[[section]]
+type = "file"
+title = "COLUMN NAMES SCHEMA"
+path = "src/schemas/column_names.py"
+
+[[section]]
+type = "text"
+title = "REQUEST"
+body = "Define a feature_names.py schema and update the training config to use it."
+```
+
+### Section types
+
+| Type   | Required                              | What it does                                                                                                   |
+|--------|---------------------------------------|----------------------------------------------------------------------------------------------------------------|
+| `text` | `title`, and one of `body` / `prompt` | Inserts text. Use `body` for inline text, or `prompt` to pull a reusable prompt from your config by name.       |
+| `file` | `title`, `path`                       | Reads the file at `path` and inlines its text. The whole file is included; `path` is a source to read, not an attachment. |
+| `tree` | `title`                               | Renders an ASCII tree of the repository. Optional `max_depth` and `use_gitignore`.                              |
+
+The tree always skips noise directories regardless of settings: `.git`,
+`__pycache__`, `.venv`, `venv`, `node_modules`, `.mypy_cache`, `.pytest_cache`,
+`.ruff_cache`, `.idea`, `.vscode`, `dist`, `build`, and `.DS_Store`. With
+`use_gitignore = true` (the default) it also honours the repository's root
+`.gitignore`.
+
+### Writing prompts inline or storing them
+
+A `text` section takes exactly one of `body` or `prompt`:
+
+- `body` puts the text directly in the spec. Best for one-off, spec-specific
+  instructions. No config file is needed.
+- `prompt` names an entry in the `[prompts]` table of your `dossier.toml`. Best
+  for instructions you reuse across specs and projects.
+
+```toml
+[[section]]
+type = "text"
+title = "CONTEXT"
+body = """
+Multi-line context that only matters for this particular prompt.
+"""
+
+[[section]]
+type = "text"
+title = "REQUEST"
+prompt = "refactor"   # resolved from [prompts].refactor in dossier.toml
+```
+
+You can mix both styles freely within a single spec.
 
 ### Multiple specs in one folder
 
-Both commands take an optional positional `NAME` so you can keep several specs
-side by side. A name maps to `context.<name>.toml`; with no name, the default
-`context.toml` is used:
+`init` and `forge` take an optional positional name so you can keep several
+specs side by side. A name maps to `context.<name>.toml`; with no name, the
+default `context.toml` is used.
 
 ```bash
-dossier init auth        # writes context.auth.toml
-dossier forge auth       # forges from context.auth.toml
-dossier forge            # forges from context.toml
-
-# folder:
-#   context.toml
-#   context.auth.toml
-#   context.api.toml
+dossier init auth     # writes context.auth.toml
+dossier forge auth    # forges from context.auth.toml
+dossier forge         # forges from context.toml
 ```
 
-For a one-off file outside that convention, `--spec PATH` takes an explicit
-path and overrides `NAME`.
+```
+context.toml
+context.auth.toml
+context.api.toml
+```
 
-### Using it in another repo
+For a file outside that convention, `--spec PATH` points at an explicit path.
 
-1. `cd` into the target project and run `dossier init`.
-2. Edit that project's `context.toml`: add a `tree` section for structure,
-   `file` sections pointing at the specific files you want the model to see
-   (paths are relative to that project's root), and a `text` REQUEST describing
-   the task.
-3. Run `dossier forge` — the prompt is copied to your clipboard. Paste it into
-   Claude / ChatGPT.
-4. Commit `context.toml` so the prompt is reproducible. Re-forge any time the
-   code changes; the spec renders against the *current* state of the repo.
+## Project configuration
 
-Global options on every command:
-
-- `--root PATH` — repo root (defaults to the current working directory).
-- `--spec PATH` — spec path (defaults to `<root>/context.toml`).
-
-`forge` flags override output settings:
-
-- `--copy / --no-copy` — copy the forged prompt to the clipboard.
-- `--stdout / --no-stdout` — print the forged prompt to stdout.
-- `--out PATH` — write the forged prompt to a file.
-
-…and the tree / config:
-
-- `--exclude PATTERN` — skip a dir/glob in the tree (repeatable).
-- `--include PATTERN` — force-show a dir/glob the default skips would drop (repeatable).
-- `--config PATH` — use a specific config file (defaults to `<root>/dossier.toml`).
-
-A token estimate is printed to **stderr** so stdout stays clean for piping.
-
-## Project config (`dossier.toml`)
-
-An optional `dossier.toml` at the repo root holds defaults that apply across all
-your spec files in that folder. Every block is optional; if the file is absent,
-built-in defaults are used.
+An optional `dossier.toml` at the project root holds defaults shared across the
+spec files in that folder. Every block is optional; without the file, built-in
+defaults apply.
 
 ```toml
-# Output defaults — a spec's own [output] overrides these; CLI flags override both.
+# Default output behaviour. A spec's own [output] overrides this, and CLI
+# flags override both.
 [output]
-copy = true
-stdout = true
-file = ""
+copy = true            # copy the forged prompt to the clipboard
+stdout = true          # also print it to stdout
+file = ""              # if set, write it to this path
 
-# Persistent tree filters. `exclude` adds skip patterns; `include` force-shows
-# entries that default skips / .gitignore would drop (and reveals their whole
-# subtree). Patterns are globs matched against each entry's name and its
-# repo-relative path. CLI --exclude / --include augment these for one run.
+# Tree filters applied to every tree section. `exclude` adds skip patterns;
+# `include` forces entries back in even when default skips or .gitignore would
+# drop them (and reveals the whole subtree underneath). Patterns are globs,
+# matched against each entry's name and its repo-relative path.
 [tree]
 exclude = ["docs", "*.snap"]
 include = ["dist"]
 
 # Reusable prompts, referenced from a text section by name.
 [prompts]
-refactor = "Refactor for readability; keep behavior identical."
+refactor = "Refactor the code above for readability. Keep behaviour identical."
+explain  = "Explain what the code above does, step by step, and flag any bugs."
 ```
 
-### Injecting a stored prompt
-
-A `text` section takes **either** an inline `body` **or** a `prompt` that names
-an entry in `[prompts]` (exactly one of the two):
-
-```toml
-[[section]]
-type = "text"
-title = "REQUEST"
-prompt = "refactor"   # body is pulled from [prompts].refactor in dossier.toml
-```
-
-Referencing a prompt that isn't defined is a **hard fail** (lists the unknown
-names, no output), same as a missing `file` path.
+Referencing a prompt that is not defined fails the render and lists the unknown
+names, the same way a missing file path does.
 
 ### Precedence
 
-- **Output:** CLI flags → spec `[output]` → config `[output]` → built-in defaults.
-- **Tree filters:** config `[tree]` and CLI `--include/--exclude` are combined;
-  `include` wins over `exclude` and over default skips / `.gitignore`.
+- **Output settings:** CLI flags, then the spec's `[output]`, then the config's
+  `[output]`, then built-in defaults.
+- **Tree filters:** config `[tree]` and the CLI `--include` / `--exclude` flags
+  are combined. `include` wins over `exclude`, default skips, and `.gitignore`.
 
-## The spec file (`context.toml`)
+## Command reference
 
-Lives at the repo root by default. All file paths inside it are **relative to
-the repo root**.
+Both commands accept these options:
 
-```toml
-# Optional. If omitted, these defaults apply.
-[output]
-copy = true            # copy forged prompt to clipboard
-stdout = true          # also print forged prompt to stdout
-file = ""              # if non-empty, write forged prompt to this path
+| Option        | Description                                                       |
+|---------------|-------------------------------------------------------------------|
+| `--root PATH` | Project root. Defaults to the current working directory.          |
+| `--spec PATH` | Explicit spec path. Overrides the positional name.                |
 
-# Sections render in the order listed.
-[[section]]
-type = "tree"
-title = "PROJECT STRUCTURE"
-max_depth = -1         # -1 = unlimited; 0 = root only; N = descend N levels
-use_gitignore = true   # honor the repo's .gitignore in addition to default skips
+### `dossier init [NAME]`
 
-[[section]]
-type = "file"
-title = "COLUMN_NAMES SCHEMA"
-path = "src/schemas/column_names.py"   # file is READ and its text inlined
+Writes a starter spec (`context.toml`, or `context.<name>.toml` for a name). It
+will not overwrite an existing spec.
 
-[[section]]
-type = "text"
-title = "REQUEST"
-body = "Define a features_names.py schema and update the training config."
-```
+### `dossier forge [NAME]`
 
-### Section types
+Renders the prompt from the spec. Additional options:
 
-| type   | required fields | behavior |
-|--------|-----------------|----------|
-| `text` | `title`, and one of `body` / `prompt` | Inlines `body` verbatim, or pulls a stored prompt by name (see [Project config](#project-config-dossiertoml)). For freeform sections (CONTEXT, REQUEST, SYSTEM INSTRUCTIONS). |
-| `file` | `title`, `path` | **Reads the file's text** and inlines it. The path is a source to read, not a file to attach. Whole file only. |
-| `tree` | `title`         | Generates an ASCII tree of the repo. Optional: `max_depth` (default `-1` = unlimited; `0` = root only; `N` = descend N levels), `use_gitignore` (default true). |
+| Option                    | Description                                                        |
+|---------------------------|--------------------------------------------------------------------|
+| `--config PATH`           | Config file to load. Defaults to `<root>/dossier.toml`.            |
+| `--include PATTERN`       | Force a directory or glob back into the tree. Repeatable.         |
+| `--exclude PATTERN`       | Skip a directory or glob in the tree. Repeatable.                 |
+| `--copy` / `--no-copy`    | Copy the prompt to the clipboard.                                 |
+| `--stdout` / `--no-stdout`| Print the prompt to stdout.                                       |
+| `--out PATH`              | Write the prompt to a file.                                       |
 
-The tree always skips: `.git`, `__pycache__`, `.venv`, `venv`, `node_modules`,
-`.mypy_cache`, `.pytest_cache`, `.ruff_cache`, `.idea`, `.vscode`, `dist`,
-`build`, `.DS_Store`. With `use_gitignore = true` it additionally skips anything
-matched by the repo's root `.gitignore`.
+A token estimate is printed to stderr (so stdout stays clean for piping), using
+`tiktoken`'s `o200k_base` encoding. Token counts vary across model families, so
+treat it as an approximation rather than an exact figure.
+
+`forge` exits non-zero, with no output, on a validation error, a missing `file`
+path, or an unknown `prompt` reference.
 
 ## Output format
 
-Each section renders as:
+Each section is wrapped in a labelled envelope:
 
 ```
 <section name="{TITLE}" type="{TYPE}">
@@ -229,24 +315,28 @@ Each section renders as:
 </section>
 ```
 
-Sections are joined by a single blank line. This format is **round-trippable**:
-the forged text can be parsed back into `(name, type, body)` records.
+Sections are separated by a blank line. The format is intentionally
+round-trippable: a rendered prompt can be parsed back into
+`(name, type, content)` records, which keeps the output machine-readable for
+tooling built on top of it.
 
-### Missing `file` paths = hard fail
+## Design notes and limitations
 
-Before forging, every `type = "file"` path is checked. If any is missing,
-dossier prints **all** missing paths and exits non-zero **without producing
-output**. This turns silent spec drift into a signal instead of a stale prompt.
+- **Whole files only.** A `file` section includes the entire file. There is no
+  line-range or symbol-level extraction.
+- **Single tokenizer.** Counts use `o200k_base` and are approximate.
+- **Literal `</section>` lines.** If a source file's own text contains a line
+  that is exactly `</section>`, the round-trip parser will mis-split that
+  section. Avoid `file` sections on such files if you intend to parse the output
+  back.
 
-## Known limitation
+## Development
 
-If a source file's own text literally contains the line `</section>`, the
-round-trip parser will mis-split that section. This is acceptable for v0 and not
-worked around — avoid using `file` sections on files that contain that exact
-line if you intend to parse the output back.
+```bash
+uv sync
+uv run pytest
+```
 
-## Token count
-
-The printed count uses `tiktoken`'s `o200k_base` encoding and is an **estimate
-only** — token counts differ across model families. It is labeled approximate
-and printed to stderr.
+The codebase keeps I/O at the edges (the CLI layer) and the rendering, parsing,
+and tree-walking logic pure, so most behaviour is covered by fast unit tests.
+Issues and pull requests are welcome.
