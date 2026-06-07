@@ -47,8 +47,10 @@ struct BuilderView: View {
     private var content: some View {
         if !model.currentSpecExists {
             NoSpecView()
+                .transition(.opacity)
         } else if model.spec.sections.isEmpty {
             emptyHint
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
         } else {
             List {
                 ForEach(model.spec.sections) { section in

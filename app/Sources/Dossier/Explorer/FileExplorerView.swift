@@ -70,11 +70,12 @@ struct FileNodeRow: View {
         if node.isDirectory {
             FileRowContent(node: node, depth: depth, isFolder: true,
                            expanded: expanded) {
-                expanded.toggle()
+                withAnimation(Theme.Motion.smooth) { expanded.toggle() }
             }
             if expanded {
                 ForEach(node.childrenLoaded) { child in
                     FileNodeRow(node: child, depth: depth + 1)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
         } else {
@@ -99,11 +100,13 @@ struct FileRowContent: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.xs) {
-            // Indentation + disclosure chevron for folders.
+            // Indentation + disclosure chevron for folders. The chevron rotates
+            // rather than swapping glyphs, so open/close reads as one motion.
             if isFolder {
-                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                Image(systemName: "chevron.right")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(Theme.Colors.mute)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
                     .frame(width: 12)
             } else {
                 Spacer().frame(width: 12)
@@ -132,17 +135,21 @@ struct FileRowContent: View {
                 .buttonStyle(IconButtonStyle(
                     idleColor: included ? Theme.Colors.accentText : Theme.Colors.mute))
                 .help(included ? "Remove from prompt" : "Add to prompt")
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
         }
         .padding(.vertical, Theme.Spacing.sm)
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.leading, CGFloat(depth) * Theme.Spacing.md)
         .background(
-            included ? Theme.Colors.accentSoft : Color.clear,
+            included ? Theme.Colors.accentSoft
+                     : (hovering ? Theme.Colors.hairlineSoft : Color.clear),
             in: RoundedRectangle(cornerRadius: Theme.Radius.sm, style: .continuous)
         )
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        .animation(Theme.Motion.snappy, value: hovering)
+        .animation(Theme.Motion.smooth, value: included)
         .onTapGesture {
             if isFolder { toggle?() }
             else { model.toggleFile(relativePath: node.relativePath) }

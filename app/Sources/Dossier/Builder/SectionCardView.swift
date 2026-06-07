@@ -9,6 +9,7 @@ struct SectionCardView: View {
 
     private var binding: Binding<SpecSection> { model.binding(for: sectionID) }
     private var isSelected: Bool { model.selectedSectionID == sectionID }
+    @State private var hovering = false
 
     var body: some View {
         let section = binding.wrappedValue
@@ -31,8 +32,16 @@ struct SectionCardView: View {
                     RoundedRectangle(cornerRadius: Theme.Radius.md, style: .continuous))
                 : nil
         )
+        // A whisper of lift on selection / hover — organic, not springy chrome.
+        .scaleEffect(isSelected ? 1.01 : (hovering ? 1.004 : 1))
         .contentShape(Rectangle())
-        .onTapGesture { model.selectedSectionID = sectionID }
+        .onHover { hovering = $0 }
+        .onTapGesture { model.selectedSectionID = isSelected ? nil : sectionID }
+        .animation(Theme.Motion.smooth, value: isSelected)
+        .animation(Theme.Motion.snappy, value: hovering)
+        .transition(.asymmetric(
+            insertion: .scale(scale: 0.94).combined(with: .opacity),
+            removal: .scale(scale: 0.92).combined(with: .opacity)))
     }
 
     // MARK: - Header

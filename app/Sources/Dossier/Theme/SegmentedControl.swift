@@ -6,6 +6,7 @@ import SwiftUI
 struct SegmentedControl<Value: Hashable>: View {
     @Binding var selection: Value
     let options: [(value: Value, label: String)]
+    @Namespace private var pill
 
     var body: some View {
         HStack(spacing: 2) {
@@ -20,11 +21,17 @@ struct SegmentedControl<Value: Hashable>: View {
                         .padding(.horizontal, Theme.Spacing.md)
                         .padding(.vertical, Theme.Spacing.xs)
                         .frame(maxWidth: .infinity)
-                        .background(
-                            isActive ? Theme.Colors.surfaceCard : Color.clear,
-                            in: RoundedRectangle(cornerRadius: Theme.Radius.sm,
+                        .background {
+                            // The active background slides between segments
+                            // rather than popping, via a shared matched element.
+                            if isActive {
+                                RoundedRectangle(cornerRadius: Theme.Radius.sm,
                                                  style: .continuous)
-                        )
+                                    .fill(Theme.Colors.surfaceCard)
+                                    .matchedGeometryEffect(id: "activePill", in: pill)
+                            }
+                        }
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
@@ -32,5 +39,6 @@ struct SegmentedControl<Value: Hashable>: View {
         .padding(2)
         .background(Theme.Colors.surfaceElevated,
                     in: RoundedRectangle(cornerRadius: Theme.Radius.md, style: .continuous))
+        .animation(Theme.Motion.smooth, value: selection)
     }
 }

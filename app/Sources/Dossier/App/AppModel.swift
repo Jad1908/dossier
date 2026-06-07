@@ -188,13 +188,17 @@ final class AppModel {
         guard !spec.referencedFilePaths.contains(relativePath) else { return }
         let title = (relativePath as NSString).lastPathComponent.uppercased()
         let section = SpecSection(title: title, kind: .file(path: relativePath))
-        spec.sections.append(section)
-        selectedSectionID = section.id
+        withAnimation(Theme.Motion.bouncy) {
+            spec.sections.append(section)
+            selectedSectionID = section.id
+        }
         scheduleSave()
     }
 
     func removeFileSection(relativePath: String) {
-        spec.sections.removeAll { $0.filePath == relativePath }
+        withAnimation(Theme.Motion.smooth) {
+            spec.sections.removeAll { $0.filePath == relativePath }
+        }
         scheduleSave()
     }
 
@@ -208,27 +212,35 @@ final class AppModel {
 
     func addTextSection() {
         let section = SpecSection(title: "NEW SECTION", kind: .text(source: .body("")))
-        spec.sections.append(section)
-        selectedSectionID = section.id
+        withAnimation(Theme.Motion.bouncy) {
+            spec.sections.append(section)
+            selectedSectionID = section.id
+        }
         scheduleSave()
     }
 
     func addTreeSection() {
         let section = SpecSection(title: "PROJECT STRUCTURE",
                               kind: .tree(maxDepth: -1, useGitignore: true))
-        spec.sections.append(section)
-        selectedSectionID = section.id
+        withAnimation(Theme.Motion.bouncy) {
+            spec.sections.append(section)
+            selectedSectionID = section.id
+        }
         scheduleSave()
     }
 
     func removeSection(id: UUID) {
-        spec.sections.removeAll { $0.id == id }
-        if selectedSectionID == id { selectedSectionID = nil }
+        withAnimation(Theme.Motion.smooth) {
+            spec.sections.removeAll { $0.id == id }
+            if selectedSectionID == id { selectedSectionID = nil }
+        }
         scheduleSave()
     }
 
     func moveSections(from offsets: IndexSet, to destination: Int) {
-        spec.sections.move(fromOffsets: offsets, toOffset: destination)
+        withAnimation(Theme.Motion.smooth) {
+            spec.sections.move(fromOffsets: offsets, toOffset: destination)
+        }
         scheduleSave()
     }
 
@@ -301,13 +313,15 @@ final class AppModel {
     private var runningProcess: Process?
 
     private func apply(_ outcome: EngineOutcome) {
-        isRendering = false
-        switch outcome {
-        case let .forged(result):
-            lastResult = result
-            engineError = nil
-        case let .engineFailure(message):
-            engineError = message
+        withAnimation(Theme.Motion.gentle) {
+            isRendering = false
+            switch outcome {
+            case let .forged(result):
+                lastResult = result
+                engineError = nil
+            case let .engineFailure(message):
+                engineError = message
+            }
         }
     }
 
@@ -322,10 +336,12 @@ final class AppModel {
     var canOutput: Bool { materializedPrompt?.isEmpty == false }
 
     func flashStatus(_ message: String) {
-        transientStatus = message
+        withAnimation(Theme.Motion.bouncy) { transientStatus = message }
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: 1_600_000_000)
-            if self?.transientStatus == message { self?.transientStatus = nil }
+            if self?.transientStatus == message {
+                withAnimation(Theme.Motion.gentle) { self?.transientStatus = nil }
+            }
         }
     }
 }

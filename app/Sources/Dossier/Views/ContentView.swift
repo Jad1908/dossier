@@ -11,12 +11,17 @@ struct ContentView: View {
         Group {
             if model.engineMissing {
                 MissingEngineView()
+                    .transition(.opacity)
             } else if !model.hasProject {
                 WelcomeView()
+                    .transition(.opacity)
             } else {
                 projectView
+                    .transition(.opacity)
             }
         }
+        .animation(Theme.Motion.gentle, value: model.hasProject)
+        .animation(Theme.Motion.gentle, value: model.engineMissing)
         .background(Theme.Colors.canvas)
         .toolbar { toolbarContent }
         .sheet(isPresented: $showPromptLibrary) {
@@ -58,6 +63,7 @@ struct ContentView: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 if let status = model.transientStatus {
                     StatusBadge(tone: .success, text: status)
+                        .transition(.scale(scale: 0.6).combined(with: .opacity))
                 }
                 Button("Save…") { model.savePrompt() }
                     .buttonStyle(SecondaryButtonStyle())

@@ -30,10 +30,12 @@ struct PreviewView: View {
             Spacer()
             if model.isRendering {
                 ProgressView().controlSize(.small)
+                    .transition(.scale.combined(with: .opacity))
             }
             Text(tokenLabel)
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.mute)
+                .contentTransition(.numericText())
         }
         .padding(Theme.Spacing.md)
     }
@@ -49,17 +51,26 @@ struct PreviewView: View {
     private var content: some View {
         if let engineError = model.engineError {
             EngineErrorBanner(message: engineError).padding(Theme.Spacing.md)
+                .transition(.move(edge: .top).combined(with: .opacity))
             Spacer()
         } else if let result = model.lastResult, !result.ok {
             ScrollView {
                 ErrorBanner(errors: result.errors)
                     .padding(Theme.Spacing.md)
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
         } else if let result = model.lastResult {
-            switch mode {
-            case .outline: OutlineView(result: result)
-            case .full:    FullPromptView(prompt: result.prompt ?? "")
+            ZStack {
+                switch mode {
+                case .outline:
+                    OutlineView(result: result)
+                        .transition(.opacity.combined(with: .move(edge: .leading)))
+                case .full:
+                    FullPromptView(prompt: result.prompt ?? "")
+                        .transition(.opacity.combined(with: .move(edge: .trailing)))
+                }
             }
+            .animation(Theme.Motion.smooth, value: mode)
         } else {
             Spacer()
         }

@@ -48,6 +48,8 @@ struct PrimaryButtonStyle: ButtonStyle {
             )
             .contentShape(Rectangle())
             .opacity(isEnabled ? 1 : 0.5)
+            .pressable(configuration.isPressed)
+            .animation(Theme.Motion.snappy, value: configuration.isPressed)
     }
     @Environment(\.isEnabled) private var isEnabled
 }
@@ -63,6 +65,7 @@ struct SecondaryButtonStyle: ButtonStyle {
             .frame(minHeight: 32)
             .opacity(configuration.isPressed ? 0.6 : 1)
             .contentShape(Rectangle())
+            .pressable(configuration.isPressed, scale: 0.96)
     }
 }
 
@@ -78,6 +81,8 @@ struct TertiaryButtonStyle: ButtonStyle {
             .surfaceTile(fill: Theme.Colors.surfaceElevated)
             .opacity(configuration.isPressed ? 0.7 : 1)
             .contentShape(Rectangle())
+            .pressable(configuration.isPressed)
+            .animation(Theme.Motion.snappy, value: configuration.isPressed)
     }
 }
 
@@ -88,6 +93,8 @@ struct IconButtonStyle: ButtonStyle {
         configuration.label
             .foregroundStyle(configuration.isPressed ? Theme.Colors.ink : idleColor)
             .contentShape(Rectangle())
+            .scaleEffect(configuration.isPressed ? 0.86 : 1)
+            .animation(Theme.Motion.snappy, value: configuration.isPressed)
     }
 }
 
