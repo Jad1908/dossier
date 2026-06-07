@@ -43,6 +43,7 @@ private struct GeneralSettings: View {
             SettingsGroup("Startup") {
                 SettingsRow(label: "Reopen last project on launch") {
                     Toggle("", isOn: $reopenLast).labelsHidden().toggleStyle(.switch)
+                        .tint(Theme.Colors.accentPrimary)
                 }
             }
         }

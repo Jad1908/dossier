@@ -206,6 +206,7 @@ private struct TreeSectionBody: View {
                     .foregroundStyle(Theme.Colors.body)
             }
             .toggleStyle(.switch)
+            .tint(Theme.Colors.accentPrimary)
             Text("Tree include/exclude patterns live in dossier.toml — edit them in the Prompts library.")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.mute)

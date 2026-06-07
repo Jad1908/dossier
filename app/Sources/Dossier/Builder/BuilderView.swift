@@ -21,24 +21,30 @@ struct BuilderView: View {
         }
     }
 
+    // A single row of action pills. Each label is fixed to one line; the pane's
+    // minimum width (set in ContentView) guarantees the row always fits, so the
+    // pills can never be squeezed into stacking.
     private var header: some View {
         HStack(spacing: Theme.Spacing.sm) {
             Button {
                 model.addTextSection()
             } label: { Label("Add Text", systemImage: "text.alignleft") }
                 .buttonStyle(TertiaryButtonStyle())
+                .fixedSize()
 
             Button {
                 model.addTreeSection()
             } label: { Label("Add Tree", systemImage: "list.bullet.indent") }
                 .buttonStyle(TertiaryButtonStyle())
+                .fixedSize()
 
-            Spacer()
+            Spacer(minLength: Theme.Spacing.sm)
 
             Button {
                 showPromptLibrary = true
             } label: { Label("Prompts", systemImage: "books.vertical") }
                 .buttonStyle(TertiaryButtonStyle())
+                .fixedSize()
         }
         .padding(Theme.Spacing.md)
     }

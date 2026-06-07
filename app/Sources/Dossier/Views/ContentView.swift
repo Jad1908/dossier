@@ -45,14 +45,16 @@ struct ContentView: View {
     private var projectView: some View {
         NavigationSplitView {
             FileExplorerView()
-                .navigationSplitViewColumnWidth(min: 200, ideal: 260, max: 360)
+                .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 420)
         } content: {
+            // Min width holds the builder header pills on one row — below this
+            // they would stack, which is exactly what we forbid.
             BuilderView(showPromptLibrary: $showPromptLibrary)
-                .navigationSplitViewColumnWidth(min: 320, ideal: 440)
+                .navigationSplitViewColumnWidth(min: 360, ideal: 440)
         } detail: {
             if showPreview {
                 PreviewView()
-                    .navigationSplitViewColumnWidth(min: 320, ideal: 440)
+                    .navigationSplitViewColumnWidth(min: 360, ideal: 440)
             } else {
                 Color.clear.frame(width: 0)
             }
