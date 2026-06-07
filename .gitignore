@@ -22,9 +22,16 @@ venv/
 .vscode/
 .claude/settings.local.json
 
+# Swift / SwiftPM (macOS app under app/)
+app/.build/
+app/.swiftpm/
+app/Dossier.app/
+*.xcuserstate
+
 # Logs
 *.log
 
 # Note: test fixtures under tests/fixtures/ intentionally include files that
 # match the patterns above (e.g. __pycache__/, *.log). They are force-added
 # (`git add -f`) so the test suite is faithful on a fresh clone.
+references/
