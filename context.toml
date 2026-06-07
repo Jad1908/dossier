@@ -1,17 +1,20 @@
-# dossier spec — see README for the full schema.
-
 [output]
 copy = true
-stdout = true
 file = ""
+stdout = true
 
 [[section]]
-type = "tree"
-title = "PROJECT STRUCTURE"
 max_depth = -1
+title = "PROJECT STRUCTURE"
+type = "tree"
 use_gitignore = true
 
 [[section]]
-type = "text"
-title = "REQUEST"
 body = "Describe what you want the assistant to do here."
+title = "REQUEST"
+type = "text"
+
+[[section]]
+path = "references/DESIGN.md"
+title = "DESIGN.MD"
+type = "file"
