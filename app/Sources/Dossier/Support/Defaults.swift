@@ -1,11 +1,38 @@
 import Foundation
 
-// Persisted preferences (DESKTOP_APP_SPEC §4): the dossier binary path override
-// and the recent-project list, kept in UserDefaults.
+// Persisted preferences (DESKTOP_APP_SPEC §4), kept in UserDefaults. The
+// settings UI binds most of these by their raw keys via @AppStorage; the keys
+// below are the single source of those strings.
 enum Defaults {
-    private static let enginePathKey = "enginePathOverride"
-    private static let recentsKey = "recentProjectPaths"
+    enum Key {
+        static let enginePath = "enginePathOverride"
+        static let recents = "recentProjectPaths"
+        static let appearance = "appearance"                 // system | light | dark
+        static let reopenLastProject = "reopenLastProject"   // Bool
+        static let defaultPreviewMode = "defaultPreviewMode" // outline | full
+    }
+
+    private static let enginePathKey = Key.enginePath
+    private static let recentsKey = Key.recents
     private static let recentsLimit = 10
+
+    /// Register the defaults for keys whose "unset" value is not the type's zero
+    /// (e.g. reopen-on-launch defaults to true). Call once at launch.
+    static func registerDefaults() {
+        UserDefaults.standard.register(defaults: [
+            Key.appearance: "system",
+            Key.reopenLastProject: true,
+            Key.defaultPreviewMode: "outline",
+        ])
+    }
+
+    static var reopenLastProject: Bool {
+        UserDefaults.standard.bool(forKey: Key.reopenLastProject)
+    }
+
+    static var defaultPreviewMode: String {
+        UserDefaults.standard.string(forKey: Key.defaultPreviewMode) ?? "outline"
+    }
 
     static var enginePathOverride: String? {
         get {

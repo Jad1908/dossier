@@ -8,7 +8,7 @@ struct PreviewView: View {
     @Environment(AppModel.self) private var model
 
     enum Mode: Hashable { case outline, full }
-    @State private var mode: Mode = .outline
+    @State private var mode: Mode = Defaults.defaultPreviewMode == "full" ? .full : .outline
 
     var body: some View {
         VStack(spacing: 0) {

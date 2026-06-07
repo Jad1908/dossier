@@ -6,6 +6,7 @@ struct ContentView: View {
     @Environment(AppModel.self) private var model
     @State private var showPreview = true
     @State private var showPromptLibrary = false
+    @AppStorage(Defaults.Key.appearance) private var appearance = "system"
 
     var body: some View {
         Group {
@@ -23,9 +24,19 @@ struct ContentView: View {
         .animation(Theme.Motion.gentle, value: model.hasProject)
         .animation(Theme.Motion.gentle, value: model.engineMissing)
         .background(Theme.Colors.canvas)
+        .preferredColorScheme(preferredScheme)
         .toolbar { toolbarContent }
         .sheet(isPresented: $showPromptLibrary) {
             PromptLibraryView().environment(model)
+        }
+    }
+
+    /// The window's appearance override from Settings → General.
+    private var preferredScheme: ColorScheme? {
+        switch appearance {
+        case "light": return .light
+        case "dark":  return .dark
+        default:      return nil   // follow the system
         }
     }
 

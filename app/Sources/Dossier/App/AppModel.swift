@@ -54,6 +54,7 @@ final class AppModel {
     private var renderTask: Task<Void, Never>?
 
     init() {
+        Defaults.registerDefaults()
         resolveEngine()
         reopenMostRecentProject()
     }
@@ -62,6 +63,7 @@ final class AppModel {
     /// IDE behavior, and a natural use of the remembered recents (§11). Falls
     /// through to the welcome empty state when there is none.
     private func reopenMostRecentProject() {
+        guard Defaults.reopenLastProject else { return }
         if let recent = recentProjectURLs.first,
            FileManager.default.fileExists(atPath: recent.path) {
             openProject(recent)
