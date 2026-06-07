@@ -11,13 +11,13 @@ enum Theme {
     // MARK: - Color tokens (DESIGN.md §Colors)
 
     enum Colors {
-        // Brand & accent
-        static let accentPrimary        = dyn(light: 0x2B50E0, dark: 0x3E63FF)
-        static let accentPrimaryPressed = dyn(light: 0x2342C2, dark: 0x3556E0)
+        // Brand & accent — teal (DESIGN.md §Brand & Accent).
+        static let accentPrimary        = dyn(light: 0x0C6B61, dark: 0x0D9488)
+        static let accentPrimaryPressed = dyn(light: 0x0A564E, dark: 0x0B7D72)
         static let onAccent             = dyn(light: 0xFFFFFF, dark: 0xFFFFFF)
-        static let accentText           = dyn(light: 0x2B50E0, dark: 0x7E9BFF)
-        static let accentSoft           = dyn(light: 0x2B50E0, lightAlpha: 0.10,
-                                               dark: 0x3E63FF, darkAlpha: 0.18)
+        static let accentText           = dyn(light: 0x0C6B61, dark: 0x2DD4BF)
+        static let accentSoft           = dyn(light: 0x0C6B61, lightAlpha: 0.10,
+                                               dark: 0x0D9488, darkAlpha: 0.18)
 
         // Surface ladder — dark rises lighter; light compresses toward white.
         static let canvas          = dyn(light: 0xF4F6F9, dark: 0x08090C)
