@@ -269,24 +269,16 @@ struct InsertDelimiter: View {
     @Environment(AppModel.self) private var model
     let afterID: UUID
     @State private var hovering = false
+    @State private var showChoices = false
     @State private var showFilePicker = false
 
     private var index: Int { model.insertionIndex(after: afterID) }
 
     var body: some View {
-        // The whole row — both rules and the pill — is the menu trigger, so a
-        // click anywhere along the accent line inserts a section here.
-        Menu {
-            Button { model.addTextSection(at: index) } label: {
-                Label("Text", systemImage: "text.alignleft")
-            }
-            Button { model.addTreeSection(at: index) } label: {
-                Label("Tree", systemImage: "list.bullet.indent")
-            }
-            Button { showFilePicker = true } label: {
-                Label("File…", systemImage: "doc")
-            }
-        } label: {
+        // A plain button (no menu chrome) over the whole row, so a click
+        // anywhere along the line inserts a section; the line itself turns
+        // accent on hover.
+        Button { showChoices = true } label: {
             HStack(spacing: Theme.Spacing.sm) {
                 rule
                 HStack(spacing: 3) {
@@ -303,12 +295,24 @@ struct InsertDelimiter: View {
             .frame(height: 20)
             .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .opacity(hovering ? 1 : 0.4)
         .onHover { hovering = $0 }
         .animation(.easeInOut(duration: 0.15), value: hovering)
         .help("Add a section here")
+        .popover(isPresented: $showChoices, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 2) {
+                choice("Text", "text.alignleft") { model.addTextSection(at: index) }
+                choice("Tree", "list.bullet.indent") { model.addTreeSection(at: index) }
+                choice("File…", "doc") {
+                    // Hand off to the file picker on the next tick so the two
+                    // popovers don't fight.
+                    DispatchQueue.main.async { showFilePicker = true }
+                }
+            }
+            .padding(Theme.Spacing.xs)
+            .frame(width: 160)
+        }
         .popover(isPresented: $showFilePicker, arrowEdge: .bottom) {
             FilePickerPopover { rel in
                 model.addFileSection(relativePath: rel, at: index)
@@ -316,6 +320,24 @@ struct InsertDelimiter: View {
             }
             .environment(model)
         }
+    }
+
+    /// One row in the insert-choices popover.
+    private func choice(_ label: String, _ symbol: String,
+                        action: @escaping () -> Void) -> some View {
+        Button {
+            showChoices = false
+            action()
+        } label: {
+            Label(label, systemImage: symbol)
+                .font(Theme.Typography.bodyMd)
+                .foregroundStyle(Theme.Colors.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Theme.Spacing.sm)
+                .padding(.vertical, Theme.Spacing.xs)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var rule: some View {
