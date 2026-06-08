@@ -37,6 +37,12 @@ struct SectionCardView: View {
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture { model.selectedSectionID = isSelected ? nil : sectionID }
+        // Inline "+" to insert a section right after this one (change 2). Kept
+        // flush inside the bottom edge so the List row doesn't clip it.
+        .overlay(alignment: .bottom) {
+            InsertSectionButton(afterID: sectionID, visible: hovering)
+                .offset(y: -2)
+        }
         .animation(Theme.Motion.smooth, value: isSelected)
         .animation(Theme.Motion.snappy, value: hovering)
         .transition(.asymmetric(
@@ -100,8 +106,7 @@ private struct TextSectionBody: View {
                         if inline {
                             binding.kind = .text(source: .body(currentBody))
                         } else {
-                            let first = model.config.promptNames.first ?? ""
-                            binding.kind = .text(source: .prompt(first))
+                            usePrompt(model.config.promptNames.first ?? "")
                         }
                     }),
                 options: [(true, "Inline body"), (false, "Saved prompt")])
@@ -154,13 +159,25 @@ private struct TextSectionBody: View {
                 if case let .text(.prompt(n)) = binding.kind { return n }
                 return ""
             },
-            set: { binding.kind = .text(source: .prompt($0)) })
+            set: { usePrompt($0) })
+    }
+
+    /// Point the section at a saved prompt, defaulting the title to the prompt
+    /// name when the title is still the generic placeholder (change 3).
+    private func usePrompt(_ name: String) {
+        var updated = binding
+        if updated.title.isEmpty || updated.title == "NEW SECTION" {
+            updated.title = name
+        }
+        updated.kind = .text(source: .prompt(name))
+        binding = updated
     }
 }
 
 // MARK: - File section body
 
 private struct FileSectionBody: View {
+    @Environment(AppModel.self) private var model
     let section: SpecSection
 
     var body: some View {
@@ -171,9 +188,19 @@ private struct FileSectionBody: View {
                 .font(Theme.Typography.mono)
                 .foregroundStyle(Theme.Colors.mute)
                 .textSelection(.enabled)
-            Spacer()
+                .lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: Theme.Spacing.sm)
+            Button {
+                if let rel = model.pickRelativeFile() {
+                    model.setFileSection(section.id, relativePath: rel)
+                }
+            } label: {
+                Label("Change…", systemImage: "arrow.triangle.2.circlepath")
+                    .font(Theme.Typography.caption)
+            }
+            .buttonStyle(IconButtonStyle())
+            .help("Choose a different file for this section")
         }
-        .help("Path is set from the explorer; remove this card to un-include the file.")
     }
 }
 
@@ -230,5 +257,46 @@ private struct TreeSectionBody: View {
         Binding(
             get: { useGitignore },
             set: { binding.kind = .tree(maxDepth: maxDepth, useGitignore: $0) })
+    }
+}
+
+// MARK: - Inline insert "+" (change 2)
+
+/// A small "+" that fades in over a card's lower edge on hover and inserts a new
+/// section (Text / Tree / File…) right after that card.
+private struct InsertSectionButton: View {
+    @Environment(AppModel.self) private var model
+    let afterID: UUID
+    let visible: Bool
+
+    var body: some View {
+        Menu {
+            Button {
+                model.addTextSection(at: model.insertionIndex(after: afterID))
+            } label: { Label("Text", systemImage: "text.alignleft") }
+            Button {
+                model.addTreeSection(at: model.insertionIndex(after: afterID))
+            } label: { Label("Tree", systemImage: "list.bullet.indent") }
+            Button {
+                if let rel = model.pickRelativeFile() {
+                    model.addFileSection(relativePath: rel,
+                                         at: model.insertionIndex(after: afterID))
+                }
+            } label: { Label("File…", systemImage: "doc") }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Theme.Colors.onAccent)
+                .frame(width: 22, height: 22)
+                .background(Theme.Colors.accentPrimary, in: Circle())
+                .overlay(Circle().strokeBorder(Theme.Colors.surface, lineWidth: 2))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .opacity(visible ? 1 : 0)
+        .scaleEffect(visible ? 1 : 0.5)
+        .allowsHitTesting(visible)
+        .help("Add a section here")
     }
 }

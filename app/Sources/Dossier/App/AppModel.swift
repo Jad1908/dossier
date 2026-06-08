@@ -208,15 +208,41 @@ final class AppModel {
 
     // MARK: - SpecSection mutations (all autosave + re-render)
 
-    func addFileSection(relativePath: String) {
-        guard !spec.referencedFilePaths.contains(relativePath) else { return }
-        let title = (relativePath as NSString).lastPathComponent.uppercased()
-        let section = SpecSection(title: title, kind: .file(path: relativePath))
+    /// Where a new section lands by default: right after the selected card, or
+    /// at the end when nothing is selected. Each add then selects the new
+    /// section, so a run of adds stays in order below the selection.
+    private var defaultInsertIndex: Int {
+        if let id = selectedSectionID,
+           let i = spec.sections.firstIndex(where: { $0.id == id }) {
+            return i + 1
+        }
+        return spec.sections.count
+    }
+
+    /// The index just after a specific section — used by the inline "+" between
+    /// cards, which inserts there regardless of the current selection.
+    func insertionIndex(after id: UUID) -> Int {
+        if let i = spec.sections.firstIndex(where: { $0.id == id }) { return i + 1 }
+        return spec.sections.count
+    }
+
+    private func insert(_ section: SpecSection, at index: Int?) {
+        let clamped = min(max(index ?? defaultInsertIndex, 0), spec.sections.count)
         withAnimation(Theme.Motion.bouncy) {
-            spec.sections.append(section)
+            spec.sections.insert(section, at: clamped)
             selectedSectionID = section.id
         }
         scheduleSave()
+    }
+
+    func addFileSection(relativePath: String, at index: Int? = nil) {
+        // Already in the prompt: select that card instead of adding a duplicate.
+        if let existing = spec.sections.first(where: { $0.filePath == relativePath }) {
+            selectedSectionID = existing.id
+            return
+        }
+        let title = (relativePath as NSString).lastPathComponent.uppercased()
+        insert(SpecSection(title: title, kind: .file(path: relativePath)), at: index)
     }
 
     func removeFileSection(relativePath: String) {
@@ -234,23 +260,40 @@ final class AppModel {
         }
     }
 
-    func addTextSection() {
-        let section = SpecSection(title: "NEW SECTION", kind: .text(source: .body("")))
-        withAnimation(Theme.Motion.bouncy) {
-            spec.sections.append(section)
-            selectedSectionID = section.id
+    /// Change which file a `file` section points at. Keeps a custom title, but
+    /// refreshes a still-default (auto-derived) one to the new file's name.
+    func setFileSection(_ id: UUID, relativePath: String) {
+        guard let i = spec.sections.firstIndex(where: { $0.id == id }) else { return }
+        var section = spec.sections[i]
+        let oldDefault = (section.filePath as NSString?)?.lastPathComponent.uppercased()
+        if section.title.isEmpty || section.title == oldDefault {
+            section.title = (relativePath as NSString).lastPathComponent.uppercased()
         }
+        section.kind = .file(path: relativePath)
+        spec.sections[i] = section
         scheduleSave()
     }
 
-    func addTreeSection() {
-        let section = SpecSection(title: "PROJECT STRUCTURE",
-                              kind: .tree(maxDepth: -1, useGitignore: true))
-        withAnimation(Theme.Motion.bouncy) {
-            spec.sections.append(section)
-            selectedSectionID = section.id
-        }
-        scheduleSave()
+    func addTextSection(at index: Int? = nil) {
+        insert(SpecSection(title: "NEW SECTION", kind: .text(source: .body(""))),
+               at: index)
+    }
+
+    func addTreeSection(at index: Int? = nil) {
+        insert(SpecSection(title: "PROJECT STRUCTURE",
+                           kind: .tree(maxDepth: -1, useGitignore: true)),
+               at: index)
+    }
+
+    /// Convert an absolute file URL to a repo-relative path, or nil if it falls
+    /// outside the project folder (spec paths are always repo-relative).
+    func relativePath(for url: URL) -> String? {
+        guard let root = projectURL else { return nil }
+        let rootPath = root.standardizedFileURL.path
+        let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+        let path = url.standardizedFileURL.path
+        guard path.hasPrefix(prefix) else { return nil }
+        return String(path.dropFirst(prefix.count))
     }
 
     func removeSection(id: UUID) {
