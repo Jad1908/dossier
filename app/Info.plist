@@ -9,6 +9,8 @@
     <string>Dossier</string>
     <key>CFBundleExecutable</key>
     <string>Dossier</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>dev.dossier.app</string>
     <key>CFBundlePackageType</key>

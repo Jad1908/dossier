@@ -26,6 +26,8 @@ venv/
 app/.build/
 app/.swiftpm/
 app/Dossier.app/
+app/AppIcon.icns
+app/AppIcon.iconset/
 *.xcuserstate
 
 # Logs
