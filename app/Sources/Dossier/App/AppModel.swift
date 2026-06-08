@@ -131,6 +131,15 @@ final class AppModel {
         render()
     }
 
+    /// Section count for a spec on disk, for the management list. Best-effort:
+    /// nil if the file can't be read/parsed.
+    func sectionCount(for ref: SpecRef) -> Int? {
+        guard let url = specURL(for: ref),
+              FileManager.default.fileExists(atPath: url.path),
+              let loaded = try? SpecIO.loadSpec(at: url) else { return nil }
+        return loaded.sections.count
+    }
+
     /// Delete a spec file from disk, then refresh and (if it was current) switch
     /// to another spec. Destructive — the caller confirms first.
     func deleteSpec(_ ref: SpecRef) {
