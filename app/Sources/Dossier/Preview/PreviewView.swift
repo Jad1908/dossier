@@ -106,25 +106,44 @@ private struct OutlineView: View {
 private struct OutlineRow: View {
     let section: ForgeSection
     let filePath: String?
-    @State private var expanded = false
+    @State private var expanded = false       // file chip peek
+    @State private var collapsed = false       // text/tree fold (VSCode-style)
+
+    private var isFile: Bool { section.type == "file" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text("<section name=\"\(section.name)\" type=\"\(section.type)\">")
-                .font(Theme.Typography.mono)
-                .foregroundStyle(Theme.Colors.mute)
-                .textSelection(.enabled)
-
-            if section.type == "file" {
-                FileSummaryChip(section: section, path: filePath,
-                                expanded: $expanded)
-            } else {
-                ClampedText(section.content, limit: PreviewLimit.section)
+            // Envelope line; text/tree rows get a small fold chevron.
+            HStack(spacing: Theme.Spacing.xs) {
+                if !isFile {
+                    Button {
+                        withAnimation(Theme.Motion.snappy) { collapsed.toggle() }
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .rotationEffect(.degrees(collapsed ? 0 : 90))
+                    }
+                    .buttonStyle(IconButtonStyle())
+                    .help(collapsed ? "Expand" : "Collapse")
+                }
+                Text("<section name=\"\(section.name)\" type=\"\(section.type)\">"
+                     + (collapsed && !isFile ? " … </section>" : ""))
+                    .font(Theme.Typography.mono)
+                    .foregroundStyle(Theme.Colors.mute)
+                    .textSelection(.enabled)
             }
 
-            Text("</section>")
-                .font(Theme.Typography.mono)
-                .foregroundStyle(Theme.Colors.mute)
+            if isFile {
+                FileSummaryChip(section: section, path: filePath, expanded: $expanded)
+                Text("</section>")
+                    .font(Theme.Typography.mono)
+                    .foregroundStyle(Theme.Colors.mute)
+            } else if !collapsed {
+                ClampedText(section.content, limit: PreviewLimit.section)
+                Text("</section>")
+                    .font(Theme.Typography.mono)
+                    .foregroundStyle(Theme.Colors.mute)
+            }
         }
     }
 }

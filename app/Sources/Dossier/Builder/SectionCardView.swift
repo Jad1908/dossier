@@ -274,19 +274,21 @@ struct InsertDelimiter: View {
     private var index: Int { model.insertionIndex(after: afterID) }
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            rule
-            Menu {
-                Button { model.addTextSection(at: index) } label: {
-                    Label("Text", systemImage: "text.alignleft")
-                }
-                Button { model.addTreeSection(at: index) } label: {
-                    Label("Tree", systemImage: "list.bullet.indent")
-                }
-                Button { showFilePicker = true } label: {
-                    Label("File…", systemImage: "doc")
-                }
-            } label: {
+        // The whole row — both rules and the pill — is the menu trigger, so a
+        // click anywhere along the accent line inserts a section here.
+        Menu {
+            Button { model.addTextSection(at: index) } label: {
+                Label("Text", systemImage: "text.alignleft")
+            }
+            Button { model.addTreeSection(at: index) } label: {
+                Label("Tree", systemImage: "list.bullet.indent")
+            }
+            Button { showFilePicker = true } label: {
+                Label("File…", systemImage: "doc")
+            }
+        } label: {
+            HStack(spacing: Theme.Spacing.sm) {
+                rule
                 HStack(spacing: 3) {
                     Image(systemName: "plus").font(.system(size: 10, weight: .bold))
                     Text("Add").font(Theme.Typography.caption)
@@ -295,25 +297,25 @@ struct InsertDelimiter: View {
                 .padding(.horizontal, Theme.Spacing.sm)
                 .padding(.vertical, 2)
                 .background(Theme.Colors.accentSoft, in: Capsule())
+                rule
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .popover(isPresented: $showFilePicker, arrowEdge: .bottom) {
-                FilePickerPopover { rel in
-                    model.addFileSection(relativePath: rel, at: index)
-                    showFilePicker = false
-                }
-                .environment(model)
-            }
-            rule
+            .padding(.horizontal, Theme.Spacing.md)
+            .frame(height: 20)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, Theme.Spacing.md)
-        .frame(height: 20)
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .opacity(hovering ? 1 : 0.4)
         .onHover { hovering = $0 }
         .animation(.easeInOut(duration: 0.15), value: hovering)
         .help("Add a section here")
+        .popover(isPresented: $showFilePicker, arrowEdge: .bottom) {
+            FilePickerPopover { rel in
+                model.addFileSection(relativePath: rel, at: index)
+                showFilePicker = false
+            }
+            .environment(model)
+        }
     }
 
     private var rule: some View {

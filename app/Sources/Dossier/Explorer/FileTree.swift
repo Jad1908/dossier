@@ -99,7 +99,7 @@ extension FileNode {
                 }
                 continue
             }
-            if url.lastPathComponent.lowercased().contains(needle) {
+            if needle.isEmpty || url.lastPathComponent.lowercased().contains(needle) {
                 results.append(FileNode(url: url, isDirectory: false, projectRoot: root))
             }
         }
