@@ -131,6 +131,19 @@ final class AppModel {
         render()
     }
 
+    /// Delete a spec file from disk, then refresh and (if it was current) switch
+    /// to another spec. Destructive — the caller confirms first.
+    func deleteSpec(_ ref: SpecRef) {
+        guard let url = specURL(for: ref) else { return }
+        try? FileManager.default.removeItem(at: url)
+        refreshSpecList()
+        if currentSpec == ref {
+            switchSpec(to: availableSpecs.first { $0.name == nil }
+                ?? availableSpecs.first
+                ?? SpecRef(name: nil))
+        }
+    }
+
     /// Create a new context.<name>.toml from the starter spec, then switch to it.
     func createSpec(named name: String?) {
         guard let projectURL else { return }

@@ -124,6 +124,7 @@ private struct SpecSwitcher: View {
     @Environment(AppModel.self) private var model
     @State private var creatingName = ""
     @State private var showCreate = false
+    @State private var pendingDelete: SpecRef?
 
     var body: some View {
         Menu {
@@ -140,8 +141,25 @@ private struct SpecSwitcher: View {
             }
             Divider()
             Button("New Spec…") { showCreate = true }
+            if model.currentSpecExists {
+                Button("Delete \(model.currentSpec.displayName)…", role: .destructive) {
+                    pendingDelete = model.currentSpec
+                }
+            }
         } label: {
             Label(model.currentSpec.displayName, systemImage: "doc.text")
+        }
+        .confirmationDialog(
+            "Delete \(pendingDelete?.fileName ?? "")?",
+            isPresented: Binding(get: { pendingDelete != nil },
+                                 set: { if !$0 { pendingDelete = nil } }),
+            presenting: pendingDelete
+        ) { ref in
+            Button("Delete", role: .destructive) { model.deleteSpec(ref) }
+            Button("Cancel", role: .cancel) {}
+        } message: { ref in
+            Text("This permanently removes \(ref.fileName) from the project folder. "
+                 + "This can’t be undone.")
         }
         .popover(isPresented: $showCreate) {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
