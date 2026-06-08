@@ -20,26 +20,6 @@ extension AppModel {
         }
     }
 
-    /// Pick a file inside the project folder and return its repo-relative path.
-    /// Used to add or re-target a `file` section. Files outside the project are
-    /// rejected (spec paths are repo-relative).
-    func pickRelativeFile() -> String? {
-        guard let root = projectURL else { return nil }
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.directoryURL = root
-        panel.prompt = "Choose"
-        panel.message = "Choose a file inside the project folder"
-        guard panel.runModal() == .OK, let url = panel.url else { return nil }
-        guard let rel = relativePath(for: url) else {
-            flashStatus("File must be inside the project")
-            return nil
-        }
-        return rel
-    }
-
     /// Copy the full materialized prompt (everything inlined) to the clipboard.
     func copyPrompt() {
         guard let prompt = materializedPrompt, !prompt.isEmpty else { return }

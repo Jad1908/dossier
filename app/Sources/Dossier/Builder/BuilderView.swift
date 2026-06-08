@@ -60,12 +60,16 @@ struct BuilderView: View {
         } else {
             List {
                 ForEach(model.spec.sections) { section in
-                    SectionCardView(sectionID: section.id)
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(
-                            top: Theme.Spacing.xs, leading: Theme.Spacing.md,
-                            bottom: Theme.Spacing.xs, trailing: Theme.Spacing.md))
+                    VStack(spacing: Theme.Spacing.xs) {
+                        SectionCardView(sectionID: section.id)
+                        // A clear delimiter + accent "+" to insert after this card.
+                        InsertDelimiter(afterID: section.id)
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(
+                        top: Theme.Spacing.xs, leading: Theme.Spacing.md,
+                        bottom: Theme.Spacing.xs, trailing: Theme.Spacing.md))
                 }
                 .onMove { offsets, destination in
                     model.moveSections(from: offsets, to: destination)

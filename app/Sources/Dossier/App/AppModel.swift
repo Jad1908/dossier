@@ -285,16 +285,6 @@ final class AppModel {
                at: index)
     }
 
-    /// Convert an absolute file URL to a repo-relative path, or nil if it falls
-    /// outside the project folder (spec paths are always repo-relative).
-    func relativePath(for url: URL) -> String? {
-        guard let root = projectURL else { return nil }
-        let rootPath = root.standardizedFileURL.path
-        let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
-        let path = url.standardizedFileURL.path
-        guard path.hasPrefix(prefix) else { return nil }
-        return String(path.dropFirst(prefix.count))
-    }
 
     func removeSection(id: UUID) {
         withAnimation(Theme.Motion.smooth) {

@@ -71,7 +71,16 @@ extension FileNode {
     /// Flat list of files (not folders) whose name matches `query`, walked from
     /// this node. Bounded so a pathological tree can't hang the UI. Used by the
     /// explorer's name search, which filters to a flat result list.
-    static func searchFiles(root: URL, query: String, limit: Int = 500) -> [FileNode] {
+    /// Heavy/noise directories worth skipping when `skipNoise` is set (e.g. the
+    /// in-app file picker), so the list isn't drowned in .git internals.
+    private static let noiseDirs: Set<String> = [
+        ".git", "node_modules", ".venv", "venv", "__pycache__", ".build",
+        ".swiftpm", "dist", "build", ".mypy_cache", ".pytest_cache",
+        ".ruff_cache", ".idea", ".vscode",
+    ]
+
+    static func searchFiles(root: URL, query: String, limit: Int = 500,
+                            skipNoise: Bool = false) -> [FileNode] {
         let needle = query.lowercased()
         var results: [FileNode] = []
         let fm = FileManager.default
@@ -84,13 +93,18 @@ extension FileNode {
             if results.count >= limit { break }
             let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?
                 .isDirectory ?? false
-            if isDir { continue }
+            if isDir {
+                if skipNoise, noiseDirs.contains(url.lastPathComponent) {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
             if url.lastPathComponent.lowercased().contains(needle) {
                 results.append(FileNode(url: url, isDirectory: false, projectRoot: root))
             }
         }
         return results.sorted {
-            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            $0.relativePath.localizedCaseInsensitiveCompare($1.relativePath) == .orderedAscending
         }
     }
 }

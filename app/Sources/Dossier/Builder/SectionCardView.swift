@@ -37,12 +37,6 @@ struct SectionCardView: View {
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture { model.selectedSectionID = isSelected ? nil : sectionID }
-        // Inline "+" to insert a section right after this one (change 2). Kept
-        // flush inside the bottom edge so the List row doesn't clip it.
-        .overlay(alignment: .bottom) {
-            InsertSectionButton(afterID: sectionID, visible: hovering)
-                .offset(y: -2)
-        }
         .animation(Theme.Motion.smooth, value: isSelected)
         .animation(Theme.Motion.snappy, value: hovering)
         .transition(.asymmetric(
@@ -179,6 +173,7 @@ private struct TextSectionBody: View {
 private struct FileSectionBody: View {
     @Environment(AppModel.self) private var model
     let section: SpecSection
+    @State private var showPicker = false
 
     var body: some View {
         HStack(spacing: Theme.Spacing.xs) {
@@ -191,15 +186,20 @@ private struct FileSectionBody: View {
                 .lineLimit(1).truncationMode(.middle)
             Spacer(minLength: Theme.Spacing.sm)
             Button {
-                if let rel = model.pickRelativeFile() {
-                    model.setFileSection(section.id, relativePath: rel)
-                }
+                showPicker = true
             } label: {
                 Label("Change…", systemImage: "arrow.triangle.2.circlepath")
                     .font(Theme.Typography.caption)
             }
             .buttonStyle(IconButtonStyle())
             .help("Choose a different file for this section")
+            .popover(isPresented: $showPicker, arrowEdge: .bottom) {
+                FilePickerPopover { rel in
+                    model.setFileSection(section.id, relativePath: rel)
+                    showPicker = false
+                }
+                .environment(model)
+            }
         }
     }
 }
@@ -260,43 +260,65 @@ private struct TreeSectionBody: View {
     }
 }
 
-// MARK: - Inline insert "+" (change 2)
+// MARK: - Insert delimiter (change 2)
 
-/// A small "+" that fades in over a card's lower edge on hover and inserts a new
-/// section (Text / Tree / File…) right after that card.
-private struct InsertSectionButton: View {
+/// A stable delimiter between section cards — a hairline with a centered accent
+/// "+" — that inserts a section (Text / Tree / File…) right after `afterID`.
+/// Quiet by default, brighter on hover; opacity-only, so nothing jumps.
+struct InsertDelimiter: View {
     @Environment(AppModel.self) private var model
     let afterID: UUID
-    let visible: Bool
+    @State private var hovering = false
+    @State private var showFilePicker = false
+
+    private var index: Int { model.insertionIndex(after: afterID) }
 
     var body: some View {
-        Menu {
-            Button {
-                model.addTextSection(at: model.insertionIndex(after: afterID))
-            } label: { Label("Text", systemImage: "text.alignleft") }
-            Button {
-                model.addTreeSection(at: model.insertionIndex(after: afterID))
-            } label: { Label("Tree", systemImage: "list.bullet.indent") }
-            Button {
-                if let rel = model.pickRelativeFile() {
-                    model.addFileSection(relativePath: rel,
-                                         at: model.insertionIndex(after: afterID))
+        HStack(spacing: Theme.Spacing.sm) {
+            rule
+            Menu {
+                Button { model.addTextSection(at: index) } label: {
+                    Label("Text", systemImage: "text.alignleft")
                 }
-            } label: { Label("File…", systemImage: "doc") }
-        } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(Theme.Colors.onAccent)
-                .frame(width: 22, height: 22)
-                .background(Theme.Colors.accentPrimary, in: Circle())
-                .overlay(Circle().strokeBorder(Theme.Colors.surface, lineWidth: 2))
+                Button { model.addTreeSection(at: index) } label: {
+                    Label("Tree", systemImage: "list.bullet.indent")
+                }
+                Button { showFilePicker = true } label: {
+                    Label("File…", systemImage: "doc")
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "plus").font(.system(size: 10, weight: .bold))
+                    Text("Add").font(Theme.Typography.caption)
+                }
+                .foregroundStyle(Theme.Colors.accentText)
+                .padding(.horizontal, Theme.Spacing.sm)
+                .padding(.vertical, 2)
+                .background(Theme.Colors.accentSoft, in: Capsule())
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .popover(isPresented: $showFilePicker, arrowEdge: .bottom) {
+                FilePickerPopover { rel in
+                    model.addFileSection(relativePath: rel, at: index)
+                    showFilePicker = false
+                }
+                .environment(model)
+            }
+            rule
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .opacity(visible ? 1 : 0)
-        .scaleEffect(visible ? 1 : 0.5)
-        .allowsHitTesting(visible)
+        .padding(.horizontal, Theme.Spacing.md)
+        .frame(height: 20)
+        .opacity(hovering ? 1 : 0.4)
+        .onHover { hovering = $0 }
+        .animation(.easeInOut(duration: 0.15), value: hovering)
         .help("Add a section here")
+    }
+
+    private var rule: some View {
+        Rectangle()
+            .fill(hovering ? Theme.Colors.accentText.opacity(0.35) : Theme.Colors.hairline)
+            .frame(height: 1)
     }
 }
