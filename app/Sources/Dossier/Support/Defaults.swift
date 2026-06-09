@@ -10,6 +10,7 @@ enum Defaults {
         static let appearance = "appearance"                 // system | light | dark
         static let reopenLastProject = "reopenLastProject"   // Bool
         static let defaultPreviewMode = "defaultPreviewMode" // outline | full
+        static let zoomLevel = "zoomLevel"                   // Double (UI scale)
     }
 
     private static let enginePathKey = Key.enginePath
@@ -23,7 +24,18 @@ enum Defaults {
             Key.appearance: "system",
             Key.reopenLastProject: true,
             Key.defaultPreviewMode: "outline",
+            Key.zoomLevel: 1.0,
         ])
+    }
+
+    /// UI scale for the whole window. Bounded so the layout never collapses or
+    /// runs off the screen; 1.0 is the designed size.
+    static let zoomRange: ClosedRange<Double> = 0.7...2.0
+    static let zoomStep: Double = 0.1
+
+    static var zoomLevel: Double {
+        get { UserDefaults.standard.double(forKey: Key.zoomLevel) }
+        set { UserDefaults.standard.set(newValue, forKey: Key.zoomLevel) }
     }
 
     static var reopenLastProject: Bool {
@@ -51,5 +63,12 @@ enum Defaults {
         var list = recentProjectPaths.filter { $0 != url.path }
         list.insert(url.path, at: 0)
         recentProjectPaths = Array(list.prefix(recentsLimit))
+    }
+}
+
+extension Comparable {
+    /// Pin a value into a closed range.
+    func clamped(to range: ClosedRange<Self>) -> Self {
+        min(max(self, range.lowerBound), range.upperBound)
     }
 }
