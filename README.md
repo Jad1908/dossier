@@ -1,59 +1,75 @@
-# dossier
+# Dossier
 
-Build deliberate, reproducible context for AI chats from your codebase.
+**A native macOS app for building deliberate, reproducible AI context from your
+codebase** — backed by a small, scriptable CLI engine.
 
-`dossier` assembles a structured text prompt out of pieces of a local
-repository — a file tree, the full text of specific files, and your own
-instructions — so you can hand rich context to an AI assistant (Claude, ChatGPT,
-and the like) without reassembling it by hand every time.
+Dossier turns pieces of a local repository — a file tree, the full text of
+specific files, and your own instructions — into one structured prompt you can
+hand to an AI assistant (Claude, ChatGPT, and the like) without reassembling it
+by hand every time. You describe the prompt once in a declarative `context.toml`;
+Dossier reads the *current* state of the repo and renders it, so the context you
+send is never quietly out of date.
 
-The prompt is defined by a declarative spec file, not by ad-hoc copy-paste. You
-describe the sections you want once in a `context.toml`; dossier reads the
-*current* state of the repo and renders the prompt. When the code changes,
-re-running regenerates the prompt against reality, so the context you send is
-never quietly out of date.
+![The Dossier app — file explorer, prompt builder, and live preview](docs/screenshot.png)
 
-It is a small, transparent CLI. The output is plain text you can read, diff, and
-commit.
+There are two ways to use it, over one shared spec:
 
-## Contents
+- **The app** (macOS) — a three-pane editor that makes assembling and
+  maintaining a spec pleasant: pick files from a live tree, arrange sections,
+  edit instructions, and watch the rendered prompt and token count update as you
+  go, then copy or save the result.
+- **The engine** (CLI) — the same rendering as a small command you can script,
+  pipe, and run in CI. The app never renders prompts itself; it edits the spec
+  and shells out to the engine. **There is one source of truth for output.**
 
-- [Why dossier](#why-dossier)
-- [Quick start](#quick-start)
-- [Installation](#installation)
-- [The spec file](#the-spec-file)
-- [Project configuration](#project-configuration)
-- [Command reference](#command-reference)
-- [Output format](#output-format)
-- [Design notes and limitations](#design-notes-and-limitations)
-- [Development](#development)
+---
 
-## Why dossier
+## The app
 
-Pasting code into a chat is easy until you do it ten times a day. The same files,
-the same project layout, the same standing instructions — rebuilt by hand,
-slightly different each time, and stale the moment you edit a file.
+A single window, three panes — explorer · builder · preview:
 
-dossier treats your prompt context as a build artifact:
+- **File explorer** — a live, IDE-style tree of the project. Add a file to the
+  prompt with `+` or by dragging it onto the builder; remove it with `−`.
+  Included files are marked.
+- **Prompt builder** — the spec's sections as editable cards in render order.
+  Add `text` and `tree` sections, edit every type inline, drag to reorder, and
+  delete. Everything autosaves to the `context.toml`.
+- **Live preview** — a structural outline of the prompt as you build it (file
+  bodies collapsed to a summary), a token estimate, and a **Show full prompt**
+  toggle that reveals the exact text **Copy** and **Save** emit. Spec errors
+  (a missing file, an unknown prompt) show inline, named by section.
 
-- **Declarative.** A spec lists the sections you want. The tool resolves them
-  against the repo at render time.
-- **Reproducible.** The same repo and spec produce byte-identical output, so a
-  prompt can be regenerated and reviewed like any other generated file.
-- **Transparent.** The result is readable text with labelled sections — no
-  hidden state, no binary blobs.
-- **Honest about drift.** If a referenced file has moved or been deleted, the
-  render fails loudly instead of silently shipping a stale prompt.
+Plus: a prompt library and tree-filter editor (`dossier.toml`), multiple specs
+per folder, light/dark themes, and a Settings window for the engine path and
+preferences.
 
-It is intentionally narrow: it selects and renders text. It does not call any
-model, attach files, or extract symbols.
+### Requirements
 
-## Quick start
+- macOS 14 (Sonoma) or newer.
+- The `dossier` CLI on your `PATH` (see [Installation](#installing-the-engine)).
+  The app auto-detects it and offers a manual override in Settings.
+
+### Build & run
+
+The app is a Swift package under [`app/`](app/) (it builds with the Swift
+toolchain alone — no full Xcode required):
 
 ```bash
-# Install once, globally (see Installation for alternatives).
-uv tool install "git+https://github.com/Jad1908/dossier.git"
+cd app
+make run        # builds release + assembles and opens Dossier.app
+```
 
+See [`app/README.md`](app/README.md) for the architecture, build phases, and the
+engine ↔ app JSON contract.
+
+---
+
+## The engine (CLI)
+
+The same selection-and-rendering logic as a transparent command. The output is
+plain text you can read, diff, and commit.
+
+```bash
 # In any project:
 cd ~/code/myapp
 dossier init        # writes a starter context.toml
@@ -79,7 +95,7 @@ title = "REQUEST"
 body = "Add rate limiting to the login endpoint. Keep the existing API shape."
 ```
 
-produces a prompt like this:
+produces:
 
 ```
 <section name="PROJECT STRUCTURE" type="tree">
@@ -101,16 +117,10 @@ Add rate limiting to the login endpoint. Keep the existing API shape.
 </section>
 ```
 
-Paste it into your assistant of choice. Commit the `context.toml` so the prompt
-is reproducible, and re-run `dossier forge` whenever the code moves on.
+### Installing the engine
 
-## Installation
-
-dossier requires Python 3.11 or newer and [uv](https://docs.astral.sh/uv/).
-
-### As a global command
-
-This is the recommended setup for day-to-day use across many projects:
+The engine requires Python 3.11+ and [uv](https://docs.astral.sh/uv/). Install it
+once, globally — the app uses this same binary:
 
 ```bash
 # Straight from GitHub:
@@ -120,41 +130,21 @@ uv tool install "git+https://github.com/Jad1908/dossier.git"
 uv tool install --editable /path/to/dossier
 ```
 
-`dossier` is then available from any directory. If the command is not found
-afterwards, run `uv tool update-shell` once and restart your shell. To update or
-remove it later:
-
-```bash
-uv tool upgrade dossier
-uv tool uninstall dossier
-```
-
-### Without installing
-
-Run it on demand from a clone, pointing `--root` at the project you want to
-forge a prompt for:
+`dossier` is then available from any directory (run `uv tool update-shell` once
+if the command isn't found). Upgrade or remove with `uv tool upgrade dossier` /
+`uv tool uninstall dossier`. To run without installing:
 
 ```bash
 uvx --from /path/to/dossier dossier forge --root ~/code/myapp
 ```
 
-### From a clone, for development
-
-```bash
-git clone https://github.com/Jad1908/dossier.git
-cd dossier
-uv sync
-uv run dossier --help
-```
-
-`uv run` resolves against the project's local environment, so the command works
-from inside the clone. Use the global install above to run it elsewhere.
+---
 
 ## The spec file
 
-A spec is a TOML file — `context.toml` by default — that lives at the root of the
-project you are describing. Every path inside it is relative to that root.
-Sections render in the order listed.
+Both the app and the CLI read the same spec — a TOML file (`context.toml` by
+default) at the root of the project you are describing. Every path inside it is
+relative to that root, and sections render in the order listed.
 
 ```toml
 [[section]]
@@ -195,53 +185,28 @@ A `text` section takes exactly one of `body` or `prompt`:
 - `body` puts the text directly in the spec. Best for one-off, spec-specific
   instructions. No config file is needed.
 - `prompt` names an entry in the `[prompts]` table of your `dossier.toml`. Best
-  for instructions you reuse across specs and projects.
-
-```toml
-[[section]]
-type = "text"
-title = "CONTEXT"
-body = """
-Multi-line context that only matters for this particular prompt.
-"""
-
-[[section]]
-type = "text"
-title = "REQUEST"
-prompt = "refactor"   # resolved from [prompts].refactor in dossier.toml
-```
-
-You can mix both styles freely within a single spec.
+  for instructions you reuse across specs and projects. (The app's Prompt
+  Library edits this table.)
 
 ### Multiple specs in one folder
 
-`init` and `forge` take an optional positional name so you can keep several
-specs side by side. A name maps to `context.<name>.toml`; with no name, the
-default `context.toml` is used.
+`init` and `forge` (and the app's spec switcher) take an optional name so you can
+keep several specs side by side. A name maps to `context.<name>.toml`; with no
+name, the default `context.toml` is used.
 
 ```bash
 dossier init auth     # writes context.auth.toml
 dossier forge auth    # forges from context.auth.toml
-dossier forge         # forges from context.toml
 ```
-
-```
-context.toml
-context.auth.toml
-context.api.toml
-```
-
-For a file outside that convention, `--spec PATH` points at an explicit path.
 
 ## Project configuration
 
 An optional `dossier.toml` at the project root holds defaults shared across the
-spec files in that folder. Every block is optional; without the file, built-in
-defaults apply.
+spec files in that folder. Every block is optional.
 
 ```toml
-# Default output behaviour. A spec's own [output] overrides this, and CLI
-# flags override both.
+# Default output behaviour. A spec's own [output] overrides this; CLI flags
+# override both.
 [output]
 copy = true            # copy the forged prompt to the clipboard
 stdout = true          # also print it to stdout
@@ -249,8 +214,7 @@ file = ""              # if set, write it to this path
 
 # Tree filters applied to every tree section. `exclude` adds skip patterns;
 # `include` forces entries back in even when default skips or .gitignore would
-# drop them (and reveals the whole subtree underneath). Patterns are globs,
-# matched against each entry's name and its repo-relative path.
+# drop them. Patterns are globs, matched against each entry's name and path.
 [tree]
 exclude = ["docs", "*.snap"]
 include = ["dist"]
@@ -261,53 +225,43 @@ refactor = "Refactor the code above for readability. Keep behaviour identical."
 explain  = "Explain what the code above does, step by step, and flag any bugs."
 ```
 
-Referencing a prompt that is not defined fails the render and lists the unknown
-names, the same way a missing file path does.
-
-### Precedence
-
-- **Output settings:** CLI flags, then the spec's `[output]`, then the config's
-  `[output]`, then built-in defaults.
-- **Tree filters:** config `[tree]` and the CLI `--include` / `--exclude` flags
-  are combined. `include` wins over `exclude`, default skips, and `.gitignore`.
+**Precedence** — Output settings: CLI flags → spec `[output]` → config
+`[output]` → built-in defaults. Tree filters: config `[tree]` and the CLI
+`--include` / `--exclude` are combined, and `include` wins over `exclude`,
+default skips, and `.gitignore`.
 
 ## Command reference
 
-Both commands accept these options:
-
-| Option        | Description                                                       |
-|---------------|-------------------------------------------------------------------|
-| `--root PATH` | Project root. Defaults to the current working directory.          |
-| `--spec PATH` | Explicit spec path. Overrides the positional name.                |
+Both commands accept `--root PATH` (project root, defaults to the cwd) and
+`--spec PATH` (explicit spec path, overrides the positional name).
 
 ### `dossier init [NAME]`
 
-Writes a starter spec (`context.toml`, or `context.<name>.toml` for a name). It
-will not overwrite an existing spec.
+Writes a starter spec (`context.toml`, or `context.<name>.toml`). It will not
+overwrite an existing spec.
 
 ### `dossier forge [NAME]`
 
 Renders the prompt from the spec. Additional options:
 
-| Option                    | Description                                                        |
-|---------------------------|--------------------------------------------------------------------|
-| `--config PATH`           | Config file to load. Defaults to `<root>/dossier.toml`.            |
-| `--include PATTERN`       | Force a directory or glob back into the tree. Repeatable.         |
-| `--exclude PATTERN`       | Skip a directory or glob in the tree. Repeatable.                 |
-| `--copy` / `--no-copy`    | Copy the prompt to the clipboard.                                 |
-| `--stdout` / `--no-stdout`| Print the prompt to stdout.                                       |
-| `--out PATH`              | Write the prompt to a file.                                       |
+| Option                     | Description                                                |
+|----------------------------|------------------------------------------------------------|
+| `--config PATH`            | Config file. Defaults to `<root>/dossier.toml`.            |
+| `--include` / `--exclude`  | Force a glob into / out of the tree. Repeatable.           |
+| `--copy` / `--no-copy`     | Copy the prompt to the clipboard.                          |
+| `--stdout` / `--no-stdout` | Print the prompt to stdout.                                |
+| `--out PATH`               | Write the prompt to a file.                                |
+| `--format text \| json`    | `json` emits a machine-readable result (no side effects) — the mode the app consumes. |
 
-A token estimate is printed to stderr (so stdout stays clean for piping), using
-`tiktoken`'s `o200k_base` encoding. Token counts vary across model families, so
-treat it as an approximation rather than an exact figure.
-
-`forge` exits non-zero, with no output, on a validation error, a missing `file`
-path, or an unknown `prompt` reference.
+A token estimate (`tiktoken`'s `o200k_base`) is printed to stderr, so stdout
+stays clean for piping. `forge` exits non-zero, with no output, on a validation
+error, a missing `file` path, or an unknown `prompt` reference — except in
+`--format json`, which reports those inside the JSON and still exits `0`.
 
 ## Output format
 
-Each section is wrapped in a labelled envelope:
+Each section is wrapped in a labelled envelope, sections separated by a blank
+line:
 
 ```
 <section name="{TITLE}" type="{TYPE}">
@@ -315,28 +269,39 @@ Each section is wrapped in a labelled envelope:
 </section>
 ```
 
-Sections are separated by a blank line. The format is intentionally
-round-trippable: a rendered prompt can be parsed back into
-`(name, type, content)` records, which keeps the output machine-readable for
-tooling built on top of it.
+The format is round-trippable: a rendered prompt can be parsed back into
+`(name, type, content)` records, keeping the output machine-readable for tooling.
+
+## Architecture
+
+A monorepo: the Python engine at the root, the macOS app nested in [`app/`](app/).
+They are coupled by the `dossier forge --format json` contract, so a change to it
+lands on both sides in one commit. A contract test
+(`tests/test_forge_json.py`) asserts the JSON shape the app's data model expects.
+
+- **The engine owns rendering, tree-walking, and token counting.** None of it is
+  duplicated in Swift.
+- **The app owns the spec files and the editing experience.** It reads and writes
+  `context.toml` / `dossier.toml`, and produces every preview by invoking the
+  engine as a subprocess.
 
 ## Design notes and limitations
 
-- **Whole files only.** A `file` section includes the entire file. There is no
+- **Whole files only.** A `file` section includes the entire file; there is no
   line-range or symbol-level extraction.
 - **Single tokenizer.** Counts use `o200k_base` and are approximate.
-- **Literal `</section>` lines.** If a source file's own text contains a line
-  that is exactly `</section>`, the round-trip parser will mis-split that
-  section. Avoid `file` sections on such files if you intend to parse the output
-  back.
+- **App-managed specs lose comments.** When the app rewrites a spec it
+  reserializes the TOML, dropping hand-written comments (the CLI never rewrites
+  your spec).
+- **Literal `</section>` lines.** If a source file contains a line that is
+  exactly `</section>`, the round-trip parser will mis-split that section.
 
 ## Development
 
 ```bash
-uv sync
-uv run pytest
+uv sync && uv run pytest          # the engine
+cd app && swift build             # the app
 ```
 
-The codebase keeps I/O at the edges (the CLI layer) and the rendering, parsing,
-and tree-walking logic pure, so most behaviour is covered by fast unit tests.
-Issues and pull requests are welcome.
+The engine keeps I/O at the edges and the rendering/parsing/tree logic pure, so
+most behaviour is covered by fast unit tests. Issues and pull requests welcome.

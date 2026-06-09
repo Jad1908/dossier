@@ -14,6 +14,7 @@ import typer
 from .config import CONFIG_FILENAME, DossierConfig, load_config
 from .render import MissingPathsError, MissingPromptsError, RenderContext
 from .render import render as render_prompt
+from .report import build_result
 from .spec import OutputConfig, SpecError, Spec, load_spec
 from .tokens import ENCODING_NAME, count_tokens
 
@@ -126,10 +127,30 @@ def forge(
     out: Optional[Path] = typer.Option(
         None, "--out", help="Write forged prompt to this path."
     ),
+    format: str = typer.Option(
+        "text",
+        "--format",
+        help="Output format: 'text' (default) or 'json' (machine-readable, "
+        "no side effects).",
+    ),
 ) -> None:
     """Forge the prompt from the spec."""
     spec_path = _spec_path(root, spec, name)
     config_path = config if config is not None else root / CONFIG_FILENAME
+
+    if format not in ("text", "json"):
+        _err(f"unknown --format {format!r}; expected 'text' or 'json'.")
+        raise typer.Exit(code=2)
+
+    # JSON mode: machine-readable result for the desktop app. No clipboard, no
+    # file write, no token line — only JSON on stdout. Render/spec failures are
+    # reported inside the JSON (ok=false), so we still exit 0.
+    if format == "json":
+        result = build_result(
+            spec_path, config_path, root, include=include, exclude=exclude
+        )
+        typer.echo(result.model_dump_json())
+        raise typer.Exit(code=0)
 
     try:
         loaded = load_spec(spec_path)

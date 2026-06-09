@@ -71,9 +71,21 @@ def _wrap(title: str, type_: str, content: str) -> str:
     return f'<section name="{title}" type="{type_}">\n{content}\n</section>'
 
 
-def render(spec: Spec, root: Path, ctx: RenderContext | None = None) -> str:
-    """Render the full prompt. Hard-fails (collecting all problems first, no
-    partial output) on missing `file` paths or unknown prompt references.
+@dataclass
+class RenderedSection:
+    """One rendered section: its title, type, and inner content (no envelope)."""
+
+    name: str
+    type: str
+    content: str
+
+
+def render_sections(
+    spec: Spec, root: Path, ctx: RenderContext | None = None
+) -> list[RenderedSection]:
+    """Render each section's inner content in order. Hard-fails (collecting all
+    problems first, no partial output) on missing `file` paths or unknown prompt
+    references — the same contract as `render`.
     """
     ctx = ctx or RenderContext()
 
@@ -84,7 +96,7 @@ def render(spec: Spec, root: Path, ctx: RenderContext | None = None) -> str:
     if missing_prompts:
         raise MissingPromptsError(missing_prompts)
 
-    parts: list[str] = []
+    rendered: list[RenderedSection] = []
     for section in spec.section:
         try:
             content = render_section_content(section, root, ctx)
@@ -92,6 +104,12 @@ def render(spec: Spec, root: Path, ctx: RenderContext | None = None) -> str:
             raise MissingPathsError([exc.path]) from exc
         except MissingPromptError as exc:  # safety net; checked above
             raise MissingPromptsError([exc.name]) from exc
-        parts.append(_wrap(section.title, section.type, content))
+        rendered.append(RenderedSection(section.title, section.type, content))
+    return rendered
 
-    return "\n\n".join(parts)
+
+def render(spec: Spec, root: Path, ctx: RenderContext | None = None) -> str:
+    """Render the full prompt by wrapping each section in its envelope."""
+    return "\n\n".join(
+        _wrap(s.name, s.type, s.content) for s in render_sections(spec, root, ctx)
+    )
