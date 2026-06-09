@@ -24,6 +24,17 @@ struct DossierApp: App {
                     .keyboardShortcut("c", modifiers: [.command, .shift])
                     .disabled(!model.canOutput)
             }
+            CommandGroup(after: .toolbar) {
+                Button("Zoom In") { model.zoomIn() }
+                    .keyboardShortcut("+", modifiers: .command)
+                    .disabled(!model.canZoomIn)
+                Button("Zoom Out") { model.zoomOut() }
+                    .keyboardShortcut("-", modifiers: .command)
+                    .disabled(!model.canZoomOut)
+                Button("Actual Size") { model.resetZoom() }
+                    .keyboardShortcut("0", modifiers: .command)
+                Divider()
+            }
         }
 
         Settings {

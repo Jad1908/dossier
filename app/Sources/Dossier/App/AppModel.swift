@@ -43,6 +43,29 @@ final class AppModel {
 
     var selectedSectionID: UUID?
 
+    // MARK: - View zoom
+
+    /// Whole-window UI scale (⌘+ / ⌘- / ⌘0). Applied at the window root so type,
+    /// spacing, and icons scale together. Persisted and clamped to a sane range.
+    var zoom: Double = Defaults.zoomLevel.clamped(to: Defaults.zoomRange) {
+        didSet { Defaults.zoomLevel = zoom }
+    }
+
+    var canZoomIn: Bool { zoom < Defaults.zoomRange.upperBound - 1e-6 }
+    var canZoomOut: Bool { zoom > Defaults.zoomRange.lowerBound + 1e-6 }
+
+    func zoomIn()    { setZoom(zoom + Defaults.zoomStep) }
+    func zoomOut()   { setZoom(zoom - Defaults.zoomStep) }
+    func resetZoom() { setZoom(1.0) }
+
+    private func setZoom(_ value: Double) {
+        // Round to the step grid so repeated presses don't drift on floating point.
+        let stepped = (value / Defaults.zoomStep).rounded() * Defaults.zoomStep
+        withAnimation(Theme.Motion.snappy) {
+            zoom = stepped.clamped(to: Defaults.zoomRange)
+        }
+    }
+
     // MARK: - Render state
 
     private(set) var isRendering = false
