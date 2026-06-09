@@ -49,7 +49,20 @@ preferences.
 - The `dossier` CLI on your `PATH` (see [Installation](#installing-the-engine)).
   The app auto-detects it and offers a manual override in Settings.
 
-### Build & run
+### Install (Apple Silicon)
+
+One command installs both the `dossier` CLI and `Dossier.app`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Jad1908/dossier/main/install.sh | sh
+```
+
+It installs the CLI via [uv](https://docs.astral.sh/uv/), downloads the app from
+the latest release, clears the download quarantine (the build is ad-hoc signed,
+not notarized), and moves it to `/Applications`. On Intel, build from source
+(below).
+
+### Build & run from source
 
 The app is a Swift package under [`app/`](app/) (it builds with the Swift
 toolchain alone — no full Xcode required):
@@ -61,6 +74,19 @@ make run        # builds release + assembles and opens Dossier.app
 
 See [`app/README.md`](app/README.md) for the architecture, build phases, and the
 engine ↔ app JSON contract.
+
+### Cutting a release
+
+Pushing a version tag builds the app on CI and publishes the installer's assets:
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+The [release workflow](.github/workflows/release.yml) runs `make release`
+(zip + checksum) on an Apple-Silicon runner and attaches them to the GitHub
+Release. Locally, `cd app && make release` produces the same `Dossier.zip` +
+`Dossier.zip.sha256`.
 
 ---
 

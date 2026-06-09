@@ -1,0 +1,45 @@
+name: Release
+
+# Push a version tag to build Dossier.app and publish it (zip + checksum) as a
+# GitHub Release — the assets the curl installer downloads from
+# releases/latest/download/.
+#
+#   git tag v1.0.0 && git push origin v1.0.0
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write   # needed to create the release
+
+jobs:
+  release:
+    runs-on: macos-14   # Apple Silicon; matches the arm64 artifact
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Build release artifacts
+        run: make release
+        working-directory: app
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            app/Dossier.zip
+            app/Dossier.zip.sha256
+          body: |
+            ### Install
+
+            ```sh
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | sh
+            ```
+
+            Installs the `dossier` CLI and `Dossier.app` (Apple Silicon).
+            The app is ad-hoc signed, not notarized — the installer clears the
+            download quarantine for you.
