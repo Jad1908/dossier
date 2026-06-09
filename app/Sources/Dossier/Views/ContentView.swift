@@ -9,21 +9,26 @@ struct ContentView: View {
     @AppStorage(Defaults.Key.appearance) private var appearance = "system"
 
     var body: some View {
-        Group {
-            if model.engineMissing {
-                MissingEngineView()
-                    .transition(.opacity)
-            } else if !model.hasProject {
-                WelcomeView()
-                    .transition(.opacity)
-            } else {
-                projectView
-                    .transition(.opacity)
+        // The zoom transform wraps only the in-window content. The toolbar stays
+        // on the untransformed host so its safe-area inset is honored — otherwise
+        // a dezoomed layout slides up under the unified toolbar.
+        ZoomScaler {
+            Group {
+                if model.engineMissing {
+                    MissingEngineView()
+                        .transition(.opacity)
+                } else if !model.hasProject {
+                    WelcomeView()
+                        .transition(.opacity)
+                } else {
+                    projectView
+                        .transition(.opacity)
+                }
             }
+            .animation(Theme.Motion.gentle, value: model.hasProject)
+            .animation(Theme.Motion.gentle, value: model.engineMissing)
+            .background(Theme.Colors.canvas)
         }
-        .animation(Theme.Motion.gentle, value: model.hasProject)
-        .animation(Theme.Motion.gentle, value: model.engineMissing)
-        .background(Theme.Colors.canvas)
         .preferredColorScheme(preferredScheme)
         .toolbar { toolbarContent }
         .sheet(isPresented: $showPromptLibrary) {
@@ -91,6 +96,26 @@ struct ContentView: View {
                 }
                 .help("Toggle preview")
             }
+        }
+    }
+}
+
+// MARK: - Zoom scaler
+
+/// Scales the in-window content uniformly by the app's zoom level. Content lays
+/// out in an inversely-scaled frame, then scales back up to fill — so ⌘+/⌘- show
+/// more or less of the same layout, not a clipped one. Lives below the toolbar
+/// (within its safe area), so chrome stays put while the content zooms.
+private struct ZoomScaler<Content: View>: View {
+    @Environment(AppModel.self) private var model
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        GeometryReader { geo in
+            content
+                .frame(width: geo.size.width / model.zoom,
+                       height: geo.size.height / model.zoom)
+                .scaleEffect(model.zoom, anchor: .topLeading)
         }
     }
 }

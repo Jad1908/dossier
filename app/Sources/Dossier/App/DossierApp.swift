@@ -9,7 +9,7 @@ struct DossierApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ZoomableRoot()
+            ContentView()
                 .environment(model)
                 .frame(minWidth: 960, minHeight: 600)
         }
@@ -40,23 +40,6 @@ struct DossierApp: App {
         Settings {
             SettingsView()
                 .environment(model)
-        }
-    }
-}
-
-/// Applies the app's UI zoom uniformly to the whole window. Content lays out in
-/// an inversely-scaled frame, then scales back up to fill — so ⌘+/⌘- show more
-/// or less of the same layout at a larger or smaller size, rather than just
-/// clipping it. Hit-testing and text editing follow the transform.
-private struct ZoomableRoot: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        GeometryReader { geo in
-            ContentView()
-                .frame(width: geo.size.width / model.zoom,
-                       height: geo.size.height / model.zoom)
-                .scaleEffect(model.zoom, anchor: .topLeading)
         }
     }
 }
