@@ -10,6 +10,8 @@ struct SectionCardView: View {
     private var binding: Binding<SpecSection> { model.binding(for: sectionID) }
     private var isSelected: Bool { model.selectedSectionID == sectionID }
     @State private var hovering = false
+    @State private var titleHovering = false
+    @FocusState private var titleFocused: Bool
 
     var body: some View {
         let section = binding.wrappedValue
@@ -52,11 +54,7 @@ struct SectionCardView: View {
                 .foregroundStyle(Theme.Colors.stone)
                 .help("Drag to reorder")
             TypeBadge(kind: section.kind)
-            TextField("Title", text: binding.title)
-                .textFieldStyle(.plain)
-                .font(Theme.Typography.headingSm)
-                .foregroundStyle(Theme.Colors.ink)
-                .onSubmit { model.selectedSectionID = sectionID }
+            titleField
             Spacer()
             Button {
                 model.removeSection(id: sectionID)
@@ -66,6 +64,45 @@ struct SectionCardView: View {
             .buttonStyle(IconButtonStyle())
             .help("Remove section")
         }
+    }
+
+    /// The section title, styled to read as an editable field: a quiet pill that
+    /// brightens on hover (with a pencil hint) and shows an accent ring while
+    /// focused. Its own tap focuses the field directly so the first click lands —
+    /// the card's whole-surface selection gesture no longer eats it.
+    private var titleField: some View {
+        HStack(spacing: Theme.Spacing.xs) {
+            TextField("Title", text: binding.title)
+                .textFieldStyle(.plain)
+                .font(Theme.Typography.headingSm)
+                .foregroundStyle(Theme.Colors.ink)
+                .focused($titleFocused)
+                .onSubmit { titleFocused = false }
+            Image(systemName: "pencil")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Theme.Colors.mute)
+                .opacity(titleHovering && !titleFocused ? 1 : 0)
+        }
+        .padding(.horizontal, Theme.Spacing.xs)
+        .padding(.vertical, 3)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.sm, style: .continuous)
+                .fill(titleFocused ? Theme.Colors.surface
+                      : (titleHovering ? Theme.Colors.surfaceElevated : .clear))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.sm, style: .continuous)
+                .strokeBorder(
+                    titleFocused ? Theme.Colors.accentPrimary.opacity(0.5)
+                        : (titleHovering ? Theme.Colors.hairline : .clear),
+                    lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onHover { titleHovering = $0 }
+        .onTapGesture { titleFocused = true }
+        .animation(Theme.Motion.snappy, value: titleHovering)
+        .animation(Theme.Motion.snappy, value: titleFocused)
+        .help("Click to rename this section")
     }
 
     // MARK: - Body by kind

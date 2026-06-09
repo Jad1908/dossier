@@ -38,6 +38,9 @@ struct PreviewView: View {
                 .contentTransition(.numericText())
         }
         .padding(Theme.Spacing.md)
+        // Fade the spinner locally so a slow render reads gently, without pulling
+        // the whole preview into an animation transaction on every render.
+        .animation(Theme.Motion.snappy, value: model.isRendering)
     }
 
     private var tokenLabel: String {
