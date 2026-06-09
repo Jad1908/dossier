@@ -57,5 +57,15 @@ sign: app
 run: app
 	open $(BUNDLE)
 
+# Package the bundle into a distributable zip + checksum (the assets the curl
+# installer downloads from a GitHub Release). ditto preserves the .app's
+# structure and resource forks; zip does not.
+release: app
+	rm -f $(APP_NAME).zip $(APP_NAME).zip.sha256
+	ditto -c -k --keepParent $(BUNDLE) $(APP_NAME).zip
+	shasum -a 256 $(APP_NAME).zip | awk '{print $$1}' > $(APP_NAME).zip.sha256
+	@echo "Built $(APP_NAME).zip ($$(cat $(APP_NAME).zip.sha256))"
+
 clean:
-	rm -rf .build $(BUNDLE) AppIcon.icns AppIcon.iconset
+	rm -rf .build $(BUNDLE) AppIcon.icns AppIcon.iconset \
+		$(APP_NAME).zip $(APP_NAME).zip.sha256

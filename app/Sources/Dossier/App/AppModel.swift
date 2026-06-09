@@ -345,6 +345,8 @@ final class AppModel {
         try? SpecIO.writeSpec(spec, to: url)
     }
 
+    private var renderIndicatorTask: Task<Void, Never>?
+
     /// Run the engine off the main thread; publish back on the main actor (§8).
     func render() {
         guard let engine, let projectURL else {
@@ -352,7 +354,15 @@ final class AppModel {
             return
         }
         let name = currentSpec.name
-        isRendering = true
+        // Only surface the spinner if the render is slow enough to notice. Most
+        // renders finish in well under this window, so typing a section no longer
+        // makes the token-count indicator flicker on every keystroke.
+        renderIndicatorTask?.cancel()
+        renderIndicatorTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.isRendering = true
+        }
         // Supersede any render still in flight so overlapping edits don't pile
         // up blocked subprocesses.
         runningProcess?.terminate()
@@ -370,15 +380,18 @@ final class AppModel {
     private var runningProcess: Process?
 
     private func apply(_ outcome: EngineOutcome) {
-        withAnimation(Theme.Motion.gentle) {
-            isRendering = false
-            switch outcome {
-            case let .forged(result):
-                lastResult = result
-                engineError = nil
-            case let .engineFailure(message):
-                engineError = message
-            }
+        // Drop the result in place — no pane-wide animation. Animating every
+        // render completion (one per keystroke, debounced) made the preview
+        // reflow and jump its scroll position mid-edit. The preview drives its
+        // own transitions (e.g. outline/full mode) where they're wanted.
+        renderIndicatorTask?.cancel()
+        isRendering = false
+        switch outcome {
+        case let .forged(result):
+            lastResult = result
+            engineError = nil
+        case let .engineFailure(message):
+            engineError = message
         }
     }
 

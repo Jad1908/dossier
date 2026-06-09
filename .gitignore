@@ -28,6 +28,8 @@ app/.swiftpm/
 app/Dossier.app/
 app/AppIcon.icns
 app/AppIcon.iconset/
+app/Dossier.zip
+app/Dossier.zip.sha256
 *.xcuserstate
 
 # Logs
