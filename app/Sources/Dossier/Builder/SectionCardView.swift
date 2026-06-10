@@ -147,11 +147,7 @@ private struct TextSectionBody: View {
                     .font(Theme.Typography.bodyMd)
                     .foregroundStyle(Theme.Colors.ink)
                     .scrollContentBackground(.hidden)
-                    // Cap the height so a long prompt scrolls inside the editor
-                    // rather than growing the row past the viewport — which made
-                    // the List scroll the row's top into view and yanked the
-                    // caret upward while typing.
-                    .frame(minHeight: 96, maxHeight: 320)
+                    .frame(minHeight: 96)
                     .padding(Theme.Spacing.xs)
                     .surfaceTile(fill: Theme.Colors.surfaceElevated)
             } else {
