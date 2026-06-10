@@ -387,19 +387,36 @@ final class AppModel {
             self.isRendering = true
         }
         // Supersede any render still in flight so overlapping edits don't pile
-        // up blocked subprocesses.
+        // up blocked subprocesses. The terminated render still returns (as an
+        // engine failure — SIGTERM is a non-zero exit), so each render carries a
+        // generation: only the latest may touch state. Without this, the stale
+        // failure briefly swapped the preview to the error banner and back,
+        // flashing the pane and resetting its scroll position on every edit
+        // that landed mid-render.
+        renderGeneration += 1
+        let generation = renderGeneration
         runningProcess?.terminate()
+        runningProcess = nil
         Task.detached(priority: .userInitiated) {
             let outcome = engine.forge(specName: name, root: projectURL) { process in
-                Task { @MainActor in self.runningProcess = process }
+                Task { @MainActor in
+                    if self.renderGeneration == generation {
+                        self.runningProcess = process
+                    } else {
+                        // Already superseded before we got the handle.
+                        process.terminate()
+                    }
+                }
             }
             await MainActor.run {
+                guard self.renderGeneration == generation else { return }
                 self.runningProcess = nil
                 self.apply(outcome)
             }
         }
     }
 
+    private var renderGeneration = 0
     private var runningProcess: Process?
 
     private func apply(_ outcome: EngineOutcome) {
