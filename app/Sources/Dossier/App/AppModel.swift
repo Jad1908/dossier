@@ -324,6 +324,16 @@ final class AppModel {
         scheduleSave()
     }
 
+    /// Move one section to `offset` (pre-removal coordinates, like `onMove`'s
+    /// destination) — the reorder drag's drop handler. No-op when the drop
+    /// wouldn't change the order, so nothing saves or re-renders.
+    func moveSection(id: UUID, to offset: Int) {
+        guard let from = spec.sections.firstIndex(where: { $0.id == id }) else { return }
+        let clamped = min(max(offset, 0), spec.sections.count)
+        guard clamped != from, clamped != from + 1 else { return }
+        moveSections(from: IndexSet(integer: from), to: clamped)
+    }
+
     /// A binding to one section that re-renders on edit.
     func binding(for id: UUID) -> Binding<SpecSection> {
         Binding(
@@ -380,26 +390,46 @@ final class AppModel {
         // Only surface the spinner if the render is slow enough to notice. Most
         // renders finish in well under this window, so typing a section no longer
         // makes the token-count indicator flicker on every keystroke.
+        // 500 ms: typical renders finish in ~200-300 ms, so the spinner only
+        // appears for genuinely slow renders instead of blipping in and out
+        // at the threshold on every other edit.
         renderIndicatorTask?.cancel()
         renderIndicatorTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 250_000_000)
+            try? await Task.sleep(nanoseconds: 500_000_000)
             guard let self, !Task.isCancelled else { return }
             self.isRendering = true
         }
         // Supersede any render still in flight so overlapping edits don't pile
-        // up blocked subprocesses.
+        // up blocked subprocesses. The terminated render still returns (as an
+        // engine failure — SIGTERM is a non-zero exit), so each render carries a
+        // generation: only the latest may touch state. Without this, the stale
+        // failure briefly swapped the preview to the error banner and back,
+        // flashing the pane and resetting its scroll position on every edit
+        // that landed mid-render.
+        renderGeneration += 1
+        let generation = renderGeneration
         runningProcess?.terminate()
+        runningProcess = nil
         Task.detached(priority: .userInitiated) {
             let outcome = engine.forge(specName: name, root: projectURL) { process in
-                Task { @MainActor in self.runningProcess = process }
+                Task { @MainActor in
+                    if self.renderGeneration == generation {
+                        self.runningProcess = process
+                    } else {
+                        // Already superseded before we got the handle.
+                        process.terminate()
+                    }
+                }
             }
             await MainActor.run {
+                guard self.renderGeneration == generation else { return }
                 self.runningProcess = nil
                 self.apply(outcome)
             }
         }
     }
 
+    private var renderGeneration = 0
     private var runningProcess: Process?
 
     private func apply(_ outcome: EngineOutcome) {
@@ -408,11 +438,14 @@ final class AppModel {
         // reflow and jump its scroll position mid-edit. The preview drives its
         // own transitions (e.g. outline/full mode) where they're wanted.
         renderIndicatorTask?.cancel()
-        isRendering = false
+        // @Observable notifies on every write, equal value or not — guard the
+        // no-op assignments so a routine render completion doesn't invalidate
+        // every view that reads these.
+        if isRendering { isRendering = false }
         switch outcome {
         case let .forged(result):
             lastResult = result
-            engineError = nil
+            if engineError != nil { engineError = nil }
         case let .engineFailure(message):
             engineError = message
         }

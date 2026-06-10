@@ -13,11 +13,18 @@ struct BuilderView: View {
             content
         }
         .background(Theme.Colors.surface)
-        // Drag-and-drop from the explorer: each dropped relative path becomes a
-        // `file` section (multi-file supported).
-        .dropDestination(for: String.self) { paths, _ in
-            for path in paths { model.addFileSection(relativePath: path) }
-            return !paths.isEmpty
+        // Pane-wide drop target (anywhere not claimed by a card/delimiter):
+        // explorer file paths become `file` sections at the end; a section
+        // payload (reorder drag that missed a specific target) moves to the end.
+        .dropDestination(for: String.self) { payloads, _ in
+            for payload in payloads {
+                if let id = SectionDrag.id(from: payload) {
+                    model.moveSection(id: id, to: model.spec.sections.count)
+                } else {
+                    model.addFileSection(relativePath: payload)
+                }
+            }
+            return !payloads.isEmpty
         }
     }
 
@@ -58,27 +65,28 @@ struct BuilderView: View {
             emptyHint
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
         } else {
-            List {
-                ForEach(model.spec.sections) { section in
-                    VStack(spacing: Theme.Spacing.xs) {
+            // A plain ScrollView + VStack, deliberately not a List: List is an
+            // NSTableView underneath, and with variable-height rows (growing
+            // TextEditors) every insert/reorder/height change made it re-measure
+            // rows, flash, and yank the scroll position back to the top. Pure
+            // SwiftUI layout diffs in place and never touches the scroll offset.
+            // Reordering is hand-rolled: the card's handle is draggable and
+            // cards/delimiters are drop targets (see SectionDrag).
+            ScrollView {
+                VStack(spacing: Theme.Spacing.xs) {
+                    ForEach(model.spec.sections) { section in
                         SectionCardView(sectionID: section.id)
                         // A clear delimiter + accent "+" to insert after this card.
                         InsertDelimiter(afterID: section.id)
                     }
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(
-                        top: Theme.Spacing.xs, leading: Theme.Spacing.md,
-                        bottom: Theme.Spacing.xs, trailing: Theme.Spacing.md))
                 }
-                .onMove { offsets, destination in
-                    model.moveSections(from: offsets, to: destination)
-                }
+                .padding(.vertical, Theme.Spacing.xs)
+                .padding(.horizontal, Theme.Spacing.md)
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
         }
     }
+
+    // MARK: - Empty state
 
     private var emptyHint: some View {
         VStack(spacing: Theme.Spacing.md) {
@@ -95,5 +103,22 @@ struct BuilderView: View {
         }
         .padding(Theme.Spacing.xl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Section reorder drag payload
+
+/// Reorder drags share the String transfer type with explorer file drags (both
+/// use `.draggable`/`.dropDestination(for: String.self)`), so a section drag is
+/// marked with a URI prefix no relative file path can start with. Drop handlers
+/// branch on it: a section id means "move me here", anything else is a file path.
+enum SectionDrag {
+    private static let prefix = "dossier-section://"
+
+    static func payload(for id: UUID) -> String { prefix + id.uuidString }
+
+    static func id(from payload: String) -> UUID? {
+        guard payload.hasPrefix(prefix) else { return nil }
+        return UUID(uuidString: String(payload.dropFirst(prefix.count)))
     }
 }
