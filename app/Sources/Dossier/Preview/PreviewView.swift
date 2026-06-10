@@ -28,10 +28,14 @@ struct PreviewView: View {
                 options: [(Mode.outline, "Outline"), (Mode.full, "Full prompt")])
                 .frame(width: 220)
             Spacer()
-            if model.isRendering {
-                ProgressView().controlSize(.small)
-                    .transition(.scale.combined(with: .opacity))
-            }
+            // Always mounted, faded via opacity only. Inserting it with a
+            // .scale transition animated an AppKit-backed NSProgressIndicator
+            // from scale ~0, which made SwiftUI request absurd inverse-scale
+            // layer sizes ("Ignoring bogus layer size" — a whole-window draw
+            // glitch that read as the screen flashing) every time a render
+            // crossed the spinner threshold.
+            ProgressView().controlSize(.small)
+                .opacity(model.isRendering ? 1 : 0)
             Text(tokenLabel)
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.mute)

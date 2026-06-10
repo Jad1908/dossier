@@ -390,9 +390,12 @@ final class AppModel {
         // Only surface the spinner if the render is slow enough to notice. Most
         // renders finish in well under this window, so typing a section no longer
         // makes the token-count indicator flicker on every keystroke.
+        // 500 ms: typical renders finish in ~200-300 ms, so the spinner only
+        // appears for genuinely slow renders instead of blipping in and out
+        // at the threshold on every other edit.
         renderIndicatorTask?.cancel()
         renderIndicatorTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 250_000_000)
+            try? await Task.sleep(nanoseconds: 500_000_000)
             guard let self, !Task.isCancelled else { return }
             self.isRendering = true
         }
@@ -435,11 +438,14 @@ final class AppModel {
         // reflow and jump its scroll position mid-edit. The preview drives its
         // own transitions (e.g. outline/full mode) where they're wanted.
         renderIndicatorTask?.cancel()
-        isRendering = false
+        // @Observable notifies on every write, equal value or not — guard the
+        // no-op assignments so a routine render completion doesn't invalidate
+        // every view that reads these.
+        if isRendering { isRendering = false }
         switch outcome {
         case let .forged(result):
             lastResult = result
-            engineError = nil
+            if engineError != nil { engineError = nil }
         case let .engineFailure(message):
             engineError = message
         }
