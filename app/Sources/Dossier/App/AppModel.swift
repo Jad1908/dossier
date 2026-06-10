@@ -324,6 +324,16 @@ final class AppModel {
         scheduleSave()
     }
 
+    /// Move one section to `offset` (pre-removal coordinates, like `onMove`'s
+    /// destination) — the reorder drag's drop handler. No-op when the drop
+    /// wouldn't change the order, so nothing saves or re-renders.
+    func moveSection(id: UUID, to offset: Int) {
+        guard let from = spec.sections.firstIndex(where: { $0.id == id }) else { return }
+        let clamped = min(max(offset, 0), spec.sections.count)
+        guard clamped != from, clamped != from + 1 else { return }
+        moveSections(from: IndexSet(integer: from), to: clamped)
+    }
+
     /// A binding to one section that re-renders on edit.
     func binding(for id: UUID) -> Binding<SpecSection> {
         Binding(

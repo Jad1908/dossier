@@ -11,6 +11,7 @@ struct SectionCardView: View {
     private var isSelected: Bool { model.selectedSectionID == sectionID }
     @State private var hovering = false
     @State private var titleHovering = false
+    @State private var dropTargeted = false
     @FocusState private var titleFocused: Bool
 
     var body: some View {
@@ -36,7 +37,34 @@ struct SectionCardView: View {
         )
         // A whisper of lift on selection / hover — organic, not springy chrome.
         .scaleEffect(isSelected ? 1.01 : (hovering ? 1.004 : 1))
+        // Drop target for the reorder drag (and for explorer files): a payload
+        // dropped on a card lands just before it. The accent line on top shows
+        // where the drop will go.
+        .overlay(alignment: .top) {
+            if dropTargeted {
+                Capsule().fill(Theme.Colors.accentPrimary)
+                    .frame(height: 2)
+                    .padding(.horizontal, Theme.Spacing.sm)
+            }
+        }
         .contentShape(Rectangle())
+        .dropDestination(for: String.self) { payloads, _ in
+            guard let myIndex = model.spec.sections.firstIndex(where: { $0.id == sectionID })
+            else { return false }
+            var handled = false
+            for payload in payloads {
+                if let dragged = SectionDrag.id(from: payload) {
+                    if dragged != sectionID {
+                        model.moveSection(id: dragged, to: myIndex)
+                        handled = true
+                    }
+                } else {
+                    model.addFileSection(relativePath: payload, at: myIndex)
+                    handled = true
+                }
+            }
+            return handled
+        } isTargeted: { dropTargeted = $0 }
         .onHover { hovering = $0 }
         .onTapGesture { model.selectedSectionID = isSelected ? nil : sectionID }
         .animation(Theme.Motion.smooth, value: isSelected)
@@ -52,6 +80,13 @@ struct SectionCardView: View {
         HStack(spacing: Theme.Spacing.sm) {
             Image(systemName: "line.3.horizontal")
                 .foregroundStyle(Theme.Colors.stone)
+                .padding(Theme.Spacing.xs)   // a forgiving grab area
+                .contentShape(Rectangle())
+                .draggable(SectionDrag.payload(for: sectionID)) {
+                    Label(section.title.isEmpty ? section.kind.label : section.title,
+                          systemImage: section.kind.symbolName)
+                        .padding(Theme.Spacing.xs)
+                }
                 .help("Drag to reorder")
             TypeBadge(kind: section.kind)
             titleField
@@ -306,6 +341,7 @@ struct InsertDelimiter: View {
     @Environment(AppModel.self) private var model
     let afterID: UUID
     @State private var hovering = false
+    @State private var dropTargeted = false
     @State private var showChoices = false
     @State private var showFilePicker = false
 
@@ -333,9 +369,22 @@ struct InsertDelimiter: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .opacity(hovering ? 1 : 0.4)
+        .opacity(hovering || dropTargeted ? 1 : 0.4)
         .onHover { hovering = $0 }
+        // Drop target: a reorder drag or an explorer file dropped on the
+        // delimiter lands exactly here (after the card above).
+        .dropDestination(for: String.self) { payloads, _ in
+            for payload in payloads {
+                if let dragged = SectionDrag.id(from: payload) {
+                    model.moveSection(id: dragged, to: index)
+                } else {
+                    model.addFileSection(relativePath: payload, at: index)
+                }
+            }
+            return !payloads.isEmpty
+        } isTargeted: { dropTargeted = $0 }
         .animation(.easeInOut(duration: 0.15), value: hovering)
+        .animation(.easeInOut(duration: 0.15), value: dropTargeted)
         .help("Add a section here")
         .popover(isPresented: $showChoices, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 2) {
