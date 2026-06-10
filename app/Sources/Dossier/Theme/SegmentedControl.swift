@@ -6,18 +6,23 @@ import SwiftUI
 struct SegmentedControl<Value: Hashable>: View {
     @Binding var selection: Value
     let options: [(value: Value, label: String)]
+    /// Values the user can't switch to (e.g. "Saved prompt" when none exist).
+    /// A disabled option dims and ignores clicks; `disabledHelp` explains why.
+    var disabledValues: Set<Value> = []
+    var disabledHelp: String? = nil
     @Namespace private var pill
 
     var body: some View {
         HStack(spacing: 2) {
             ForEach(options, id: \.value) { option in
                 let isActive = option.value == selection
+                let isDisabled = disabledValues.contains(option.value)
                 Button {
                     selection = option.value
                 } label: {
                     Text(option.label)
                         .font(Theme.Typography.bodyStrong)
-                        .foregroundStyle(isActive ? Theme.Colors.ink : Theme.Colors.mute)
+                        .foregroundStyle(labelColor(active: isActive, disabled: isDisabled))
                         .padding(.horizontal, Theme.Spacing.md)
                         .padding(.vertical, Theme.Spacing.xs)
                         .frame(maxWidth: .infinity)
@@ -34,11 +39,20 @@ struct SegmentedControl<Value: Hashable>: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .disabled(isDisabled)
+                .help(isDisabled ? (disabledHelp ?? "") : "")
             }
         }
         .padding(2)
         .background(Theme.Colors.surfaceElevated,
                     in: RoundedRectangle(cornerRadius: Theme.Radius.md, style: .continuous))
         .animation(Theme.Motion.smooth, value: selection)
+    }
+
+    /// The active segment keeps full-ink text even when its value is disabled
+    /// (it's the current state); only an inactive, disabled option dims to ash.
+    private func labelColor(active: Bool, disabled: Bool) -> Color {
+        if active { return Theme.Colors.ink }
+        return disabled ? Theme.Colors.ash : Theme.Colors.mute
     }
 }
