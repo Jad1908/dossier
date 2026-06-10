@@ -128,6 +128,8 @@ private struct TextSectionBody: View {
         return false
     }
 
+    private var hasPrompts: Bool { !model.config.promptNames.isEmpty }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             SegmentedControl(
@@ -136,11 +138,18 @@ private struct TextSectionBody: View {
                     set: { inline in
                         if inline {
                             binding.kind = .text(source: .body(currentBody))
-                        } else {
+                        } else if hasPrompts {
                             usePrompt(model.config.promptNames.first ?? "")
                         }
+                        // With no saved prompts, "Saved prompt" is disabled and
+                        // this setter never reaches the prompt branch — so the
+                        // section can't be pointed at an empty/unknown prompt,
+                        // which the engine would (rightly) flag as an error.
                     }),
-                options: [(true, "Inline body"), (false, "Saved prompt")])
+                options: [(true, "Inline body"), (false, "Saved prompt")],
+                // false == the "Saved prompt" segment.
+                disabledValues: hasPrompts ? [] : [false],
+                disabledHelp: "Add a prompt in the Prompts library to reuse it here.")
 
             if isInline {
                 TextEditor(text: bodyBinding)
