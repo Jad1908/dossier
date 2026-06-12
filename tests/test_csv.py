@@ -102,6 +102,45 @@ def test_semicolon_delimiter_is_sniffed(repo: Path):
     assert _cells(lines[2]) == ["36"]
 
 
+def test_tab_delimiter_with_quoted_fields(repo: Path):
+    # The schedule-export pattern: tab-delimited, every data cell quoted,
+    # slashes and spaces in values. (A real file in this shape defeated
+    # csv.Sniffer, which is why sniffing is structural.)
+    (repo / "tabs.csv").write_text(
+        'Title\tStart\tNotes\n'
+        '"Vacances d\'Été - Zones A/B/C"\t"04.07.2026"\t""\n'
+        '"Pont de l\'Ascension"\t"14.05.2026"\t""\n',
+        encoding="utf-8",
+    )
+    spec = Spec(section=[CsvSection(
+        type="csv", title="T", path="tabs.csv", rows=1, columns=["Start"])])
+    lines = _content(render(spec, repo)).splitlines()
+    assert _cells(lines[0]) == ["Start"]
+    assert _cells(lines[2]) == ["04.07.2026"]
+
+
+def test_commas_inside_quotes_dont_fool_the_sniffer(repo: Path):
+    # Semicolon-delimited, but every row carries quoted commas — a naive
+    # count would pick comma; consistency scoring keeps the semicolon.
+    (repo / "tricky.csv").write_text(
+        'name;notes\nada;"loves maths, logic"\nalan;"machines, minds"\n',
+        encoding="utf-8",
+    )
+    spec = Spec(section=[CsvSection(type="csv", title="T", path="tricky.csv")])
+    lines = _content(render(spec, repo)).splitlines()
+    assert _cells(lines[0]) == ["name", "notes"]
+    assert _cells(lines[2]) == ["ada", "loves maths, logic"]
+
+
+def test_cr_only_line_endings(repo: Path):
+    (repo / "cr.csv").write_bytes(b"a,b\r1,2\r3,4\r")
+    spec = Spec(section=[CsvSection(type="csv", title="C", path="cr.csv", rows=1)])
+    lines = _content(render(spec, repo)).splitlines()
+    assert _cells(lines[0]) == ["a", "b"]
+    assert _cells(lines[2]) == ["1", "2"]
+    assert lines[3] == "... (1 more row)"
+
+
 def test_bom_is_stripped(repo: Path):
     (repo / "bom.csv").write_text("﻿name,age\nada,36\n", encoding="utf-8")
     spec = Spec(section=[CsvSection(

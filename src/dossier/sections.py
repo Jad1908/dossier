@@ -79,12 +79,45 @@ def _read_repo_file(path: str, root: Path) -> str:
     return target.read_text(encoding="utf-8", errors="replace")
 
 
-def _sniff_delimiter(sample: str) -> str:
-    """Best-effort delimiter detection (Excel exports `;` in many locales)."""
-    try:
-        return csv.Sniffer().sniff(sample, delimiters=",;\t|").delimiter
-    except csv.Error:
-        return ","
+# Candidate delimiters, in priority order for ties. Excel exports `;` in many
+# locales; schedulers and db dumps love tabs and pipes.
+_CANDIDATE_DELIMITERS = (",", ";", "\t", "|")
+
+
+def _sniff_delimiter(sample: str, truncated: bool = False) -> str:
+    """Pick the delimiter whose split is widest and most consistent across the
+    sample's records.
+
+    Deliberately not csv.Sniffer, which guesses from quoting patterns and
+    misfires on real-world exports. This scores structure instead: for each
+    candidate, parse the sample and prefer the one where rows agree with the
+    header's column count (consistency first, then width). The app's columns
+    picker runs the same algorithm, so both sides always agree.
+    """
+    best = ","
+    best_key = (0.0, 0)
+    for cand in _CANDIDATE_DELIMITERS:
+        try:
+            rows: list[list[str]] = []
+            for row in csv.reader(io.StringIO(sample), delimiter=cand):
+                if row:
+                    rows.append(row)
+                if len(rows) >= 30:
+                    break
+        except csv.Error:
+            continue
+        if truncated and len(rows) > 1:
+            rows = rows[:-1]   # the sample cut may have split a record
+        if not rows:
+            continue
+        cols = len(rows[0])
+        if cols < 2:
+            continue   # no split at all — never beats a real candidate
+        consistency = sum(1 for r in rows if len(r) == cols) / len(rows)
+        key = (consistency, cols)
+        if key > best_key:
+            best, best_key = cand, key
+    return best
 
 
 def _markdown_table(header: list[str], rows: list[list[str]]) -> str:
@@ -121,7 +154,8 @@ def _render_csv(section: CsvSection, root: Path) -> str:
     many were omitted, so the model knows it's looking at a sample.
     """
     text = _read_repo_file(section.path, root).lstrip("\ufeff")
-    reader = csv.reader(io.StringIO(text), delimiter=_sniff_delimiter(text[:8192]))
+    delimiter = _sniff_delimiter(text[:8192], truncated=len(text) > 8192)
+    reader = csv.reader(io.StringIO(text), delimiter=delimiter)
     raw_header = next(reader, None)
     if raw_header is None:
         return ""
