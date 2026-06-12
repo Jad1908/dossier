@@ -43,6 +43,26 @@ final class AppModel {
 
     var selectedSectionID: UUID?
 
+    // MARK: - File preview
+
+    /// The file shown in the floating preview panel — opened from the explorer's
+    /// hover magnifier or a file section's magnifier. Nil = panel closed. One
+    /// panel: a second preview repoints it rather than stacking windows.
+    private(set) var filePreview: FilePreviewRequest?
+
+    func previewFile(relativePath: String) {
+        guard let projectURL else { return }
+        withAnimation(Theme.Motion.smooth) {
+            filePreview = FilePreviewRequest(
+                relativePath: relativePath,
+                url: projectURL.appendingPathComponent(relativePath))
+        }
+    }
+
+    func closeFilePreview() {
+        withAnimation(Theme.Motion.smooth) { filePreview = nil }
+    }
+
     // MARK: - View zoom
 
     /// Whole-window UI scale (⌘+ / ⌘- / ⌘0). Applied at the window root so type,
@@ -103,6 +123,7 @@ final class AppModel {
 
     func openProject(_ url: URL) {
         projectURL = url
+        filePreview = nil   // a preview from another project would be stale
         Defaults.noteRecentProject(url)
         fileTreeRoot = FileNode(url: url, isDirectory: true, projectRoot: url)
         fileTreeRoot?.loadChildrenIfNeeded()

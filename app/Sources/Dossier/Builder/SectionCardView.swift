@@ -267,6 +267,13 @@ private struct FileSectionBody: View {
                 .lineLimit(1).truncationMode(.middle)
             Spacer(minLength: Theme.Spacing.sm)
             Button {
+                if let path = section.filePath { model.previewFile(relativePath: path) }
+            } label: {
+                Image(systemName: "magnifyingglass").imageScale(.small)
+            }
+            .buttonStyle(IconButtonStyle())
+            .help("Preview this file")
+            Button {
                 showPicker = true
             } label: {
                 Label("Change…", systemImage: "arrow.triangle.2.circlepath")
