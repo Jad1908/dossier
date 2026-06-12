@@ -14,19 +14,34 @@ enum TextSource: Equatable, Hashable {
     case prompt(String)   // prompt name
 }
 
-/// One of the engine's three section kinds. The per-section fields match the
+/// One of the engine's four section kinds. The per-section fields match the
 /// engine exactly: tree carries only max_depth + use_gitignore (include/exclude
 /// live in dossier.toml's [tree], not here — the engine forbids extra fields).
 enum SectionKind: Equatable, Hashable {
     case tree(maxDepth: Int, useGitignore: Bool)
     case file(path: String)
     case text(source: TextSource)
+    /// A csv head extractor (spec.py CsvSection): header + the first `rows`
+    /// data rows (-1 = whole file), narrowed to `columns` when non-empty.
+    case csv(path: String, rows: Int, columns: [String])
+
+    /// The default peek for a freshly selected csv file.
+    static let defaultCSVRows = 5
+
+    /// The kind a newly selected file maps to: .csv files get the head
+    /// extractor (first rows only); everything else inlines whole.
+    static func forNewFile(relativePath: String) -> SectionKind {
+        relativePath.lowercased().hasSuffix(".csv")
+            ? .csv(path: relativePath, rows: defaultCSVRows, columns: [])
+            : .file(path: relativePath)
+    }
 
     var typeString: String {
         switch self {
         case .tree: return "tree"
         case .file: return "file"
         case .text: return "text"
+        case .csv:  return "csv"
         }
     }
 
@@ -37,6 +52,7 @@ enum SectionKind: Equatable, Hashable {
         case .tree: return "list.bullet.indent"
         case .file: return "doc.text"
         case .text: return "text.alignleft"
+        case .csv:  return "tablecells"
         }
     }
 }
@@ -53,10 +69,14 @@ struct SpecSection: Identifiable, Equatable, Hashable {
         self.kind = kind
     }
 
-    /// The repo-relative path, for `file` sections only.
+    /// The repo-relative path, for `file` and `csv` sections — the kinds the
+    /// explorer's included state and dedupe key off.
     var filePath: String? {
-        if case let .file(path) = kind { return path }
-        return nil
+        switch kind {
+        case let .file(path): return path
+        case let .csv(path, _, _): return path
+        default: return nil
+        }
     }
 }
 
