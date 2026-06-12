@@ -19,7 +19,7 @@ from pydantic import (
     model_validator,
 )
 
-ALLOWED_TYPES = ("text", "file", "tree")
+ALLOWED_TYPES = ("text", "file", "tree", "csv")
 
 
 class SpecError(Exception):
@@ -59,8 +59,27 @@ class TreeSection(_SectionBase):
     use_gitignore: bool = True
 
 
+class CsvSection(_SectionBase):
+    """A csv head extractor: the header plus the first `rows` data rows,
+    optionally narrowed to named columns — a peek at tabular data without
+    inlining a whole dataset."""
+
+    type: Literal["csv"]
+    path: str
+    # Data rows to keep after the header; -1 = the whole file.
+    rows: int = 5
+    # Column names to keep (header order); empty = all columns.
+    columns: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _rows_in_range(self) -> "CsvSection":
+        if self.rows < -1:
+            raise ValueError("'rows' must be -1 (whole file) or >= 0")
+        return self
+
+
 Section = Annotated[
-    Union[TextSection, FileSection, TreeSection],
+    Union[TextSection, FileSection, TreeSection, CsvSection],
     Field(discriminator="type"),
 ]
 

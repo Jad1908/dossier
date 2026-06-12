@@ -46,6 +46,11 @@ enum SpecIO {
                 case "file":
                     sections.append(SpecSection(title: title,
                         kind: .file(path: t["path"]?.string ?? "")))
+                case "csv":
+                    sections.append(SpecSection(title: title, kind: .csv(
+                        path: t["path"]?.string ?? "",
+                        rows: t["rows"]?.int ?? SectionKind.defaultCSVRows,
+                        columns: (t["columns"]?.array).map(strings) ?? [])))
                 case "text":
                     if let prompt = t["prompt"]?.string {
                         sections.append(SpecSection(title: title,
@@ -84,6 +89,13 @@ enum SpecIO {
                 t["use_gitignore"] = useGitignore
             case let .file(path):
                 t["path"] = path
+            case let .csv(path, rows, columns):
+                t["path"] = path
+                t["rows"] = rows
+                if !columns.isEmpty {
+                    let a = TOMLArray(); columns.forEach { a.append($0) }
+                    t["columns"] = a
+                }
             case let .text(source):
                 switch source {
                 case let .body(body): t["body"] = body

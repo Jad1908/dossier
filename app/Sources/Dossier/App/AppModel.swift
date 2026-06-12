@@ -301,7 +301,9 @@ final class AppModel {
             return
         }
         let title = (relativePath as NSString).lastPathComponent.uppercased()
-        insert(SpecSection(title: title, kind: .file(path: relativePath)), at: index)
+        insert(SpecSection(title: title,
+                           kind: .forNewFile(relativePath: relativePath)),
+               at: index)
     }
 
     func removeFileSection(relativePath: String) {
@@ -328,7 +330,14 @@ final class AppModel {
         if section.title.isEmpty || section.title == oldDefault {
             section.title = (relativePath as NSString).lastPathComponent.uppercased()
         }
-        section.kind = .file(path: relativePath)
+        // Repointing follows the new file's kind. csv → csv keeps the row
+        // scope but drops the column picks — they named the old file's header.
+        switch (section.kind, SectionKind.forNewFile(relativePath: relativePath)) {
+        case let (.csv(_, rows, _), .csv):
+            section.kind = .csv(path: relativePath, rows: rows, columns: [])
+        case let (_, newKind):
+            section.kind = newKind
+        }
         spec.sections[i] = section
         scheduleSave()
     }

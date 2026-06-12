@@ -148,6 +148,7 @@ struct SectionCardView: View {
         case .text:    TextSectionBody(binding: binding)
         case .file:    FileSectionBody(section: section)
         case .tree:    TreeSectionBody(binding: binding)
+        case .csv:     CsvSectionBody(binding: binding)
         }
     }
 }
