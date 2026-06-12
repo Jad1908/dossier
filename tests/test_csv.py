@@ -33,63 +33,95 @@ def _content(out: str) -> str:
     return body.rsplit("\n</section>", 1)[0]
 
 
+def _cells(line: str) -> list[str]:
+    return [c.strip() for c in line.strip().strip("|").split("|")]
+
+
 def test_default_head_is_five_rows(repo: Path):
     out = render(_csv_spec(), repo)
     assert 'name="DATA" type="csv"' in out
-    content = _content(out)
-    lines = content.splitlines()
-    assert lines[0] == "name,age,city"
-    assert lines[1] == "ada,36,london"
-    assert lines[5] == "donald,87,stanford"
-    # 7 data rows, 5 kept → header + 5 + omission marker.
-    assert lines[6] == "... (2 more rows)"
-    assert len(lines) == 7
+    lines = _content(out).splitlines()
+    # Header + separator + 5 data rows + omission marker.
+    assert len(lines) == 8
+    assert _cells(lines[0]) == ["name", "age", "city"]
+    assert set(lines[1]) <= {"|", "-", " "}
+    assert _cells(lines[2]) == ["ada", "36", "london"]
+    assert _cells(lines[6]) == ["donald", "87", "stanford"]
+    assert lines[7] == "... (2 more rows)"
+
+
+def test_table_is_aligned(repo: Path):
+    lines = _content(render(_csv_spec(), repo)).splitlines()
+    table = lines[:-1]   # all but the omission marker
+    assert len({len(line) for line in table}) == 1
 
 
 def test_custom_row_count(repo: Path):
-    content = _content(render(_csv_spec(rows=2), repo))
-    assert content.splitlines() == [
-        "name,age,city",
-        "ada,36,london",
-        "alan,41,manchester",
-        "... (5 more rows)",
-    ]
+    lines = _content(render(_csv_spec(rows=2), repo)).splitlines()
+    assert len(lines) == 5
+    assert _cells(lines[3]) == ["alan", "41", "manchester"]
+    assert lines[4] == "... (5 more rows)"
+
+
+def test_header_only(repo: Path):
+    lines = _content(render(_csv_spec(rows=0), repo)).splitlines()
+    assert _cells(lines[0]) == ["name", "age", "city"]
+    assert set(lines[1]) <= {"|", "-", " "}
+    assert lines[2] == "... (7 more rows)"
+    assert len(lines) == 3
 
 
 def test_whole_file(repo: Path):
-    # Raw pass-through, like a file section (trailing newline included).
-    content = _content(render(_csv_spec(rows=-1), repo))
-    assert content.rstrip("\n") == CSV.rstrip("\n")
-    assert "more rows" not in content
+    lines = _content(render(_csv_spec(rows=-1), repo)).splitlines()
+    assert len(lines) == 9   # header + separator + all 7 data rows
+    assert _cells(lines[8]) == ["tim", "68", "london"]
+    assert "more rows" not in lines[-1]
 
 
 def test_column_selection(repo: Path):
-    content = _content(render(_csv_spec(rows=2, columns=["city", "name"]), repo))
+    lines = _content(render(_csv_spec(rows=2, columns=["city", "name"]), repo)).splitlines()
     # Header order is preserved regardless of selection order.
-    assert content.splitlines() == [
-        "name,city",
-        "ada,london",
-        "alan,manchester",
-        "... (5 more rows)",
-    ]
-
-
-def test_whole_file_with_columns_still_filters(repo: Path):
-    content = _content(render(_csv_spec(rows=-1, columns=["age"]), repo))
-    lines = content.splitlines()
-    assert lines[0] == "age"
-    assert len(lines) == 8  # header + all 7 data rows, no marker
+    assert _cells(lines[0]) == ["name", "city"]
+    assert _cells(lines[2]) == ["ada", "london"]
+    assert lines[4] == "... (5 more rows)"
 
 
 def test_unknown_columns_fall_back_to_all(repo: Path):
-    content = _content(render(_csv_spec(rows=1, columns=["nope"]), repo))
-    assert content.splitlines()[0] == "name,age,city"
+    lines = _content(render(_csv_spec(rows=1, columns=["nope"]), repo)).splitlines()
+    assert _cells(lines[0]) == ["name", "age", "city"]
+
+
+def test_semicolon_delimiter_is_sniffed(repo: Path):
+    (repo / "semi.csv").write_text(
+        "name;age;city\nada;36;london\nalan;41;manchester\n", encoding="utf-8"
+    )
+    spec = Spec(section=[CsvSection(
+        type="csv", title="S", path="semi.csv", rows=1, columns=["age"])])
+    lines = _content(render(spec, repo)).splitlines()
+    assert _cells(lines[0]) == ["age"]
+    assert _cells(lines[2]) == ["36"]
+
+
+def test_bom_is_stripped(repo: Path):
+    (repo / "bom.csv").write_text("﻿name,age\nada,36\n", encoding="utf-8")
+    spec = Spec(section=[CsvSection(
+        type="csv", title="B", path="bom.csv", columns=["name"])])
+    lines = _content(render(spec, repo)).splitlines()
+    assert _cells(lines[0]) == ["name"]
+
+
+def test_pipes_in_cells_are_escaped(repo: Path):
+    (repo / "pipes.csv").write_text('a,b\n"x|y",2\n', encoding="utf-8")
+    spec = Spec(section=[CsvSection(type="csv", title="P", path="pipes.csv")])
+    content = _content(render(spec, repo))
+    assert "x\\|y" in content
 
 
 def test_short_rows_pad_missing_cells(repo: Path):
     (repo / "ragged.csv").write_text("a,b\n1\n", encoding="utf-8")
     spec = Spec(section=[CsvSection(type="csv", title="R", path="ragged.csv")])
-    assert _content(render(spec, repo)).splitlines() == ["a,b", "1,"]
+    lines = _content(render(spec, repo)).splitlines()
+    assert _cells(lines[2]) == ["1", ""]
 
 
 def test_missing_csv_path_hard_fails(repo: Path):

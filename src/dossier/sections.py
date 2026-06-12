@@ -79,23 +79,53 @@ def _read_repo_file(path: str, root: Path) -> str:
     return target.read_text(encoding="utf-8", errors="replace")
 
 
-def _render_csv(section: CsvSection, root: Path) -> str:
-    """Header + the first `rows` data rows, narrowed to `columns` when set.
-
-    Column names that don't exist in the header are ignored; if none of the
-    requested columns exist, all columns are kept rather than emitting an
-    empty table. When rows are cut, a trailing marker says how many were
-    omitted, so the model knows it's looking at a sample.
-    """
-    text = _read_repo_file(section.path, root)
-    if section.rows == -1 and not section.columns:
-        return text   # whole file, all columns — same as a file section
-
-    reader = csv.reader(io.StringIO(text))
+def _sniff_delimiter(sample: str) -> str:
+    """Best-effort delimiter detection (Excel exports `;` in many locales)."""
     try:
-        header = next(reader)
-    except StopIteration:
+        return csv.Sniffer().sniff(sample, delimiters=",;\t|").delimiter
+    except csv.Error:
+        return ","
+
+
+def _markdown_table(header: list[str], rows: list[list[str]]) -> str:
+    """An aligned markdown table — readable in the preview, friendly to models."""
+
+    def clean(cell: str) -> str:
+        return (
+            cell.replace("\r", " ").replace("\n", " ").replace("|", "\\|").strip()
+        )
+
+    head = [clean(c) for c in header]
+    body = [[clean(c) for c in row] for row in rows]
+    widths = [
+        max([len(h), 3] + [len(row[i]) for row in body])
+        for i, h in enumerate(head)
+    ]
+
+    def fmt(cells: list[str]) -> str:
+        return "| " + " | ".join(c.ljust(w) for c, w in zip(cells, widths)) + " |"
+
+    lines = [fmt(head), "| " + " | ".join("-" * w for w in widths) + " |"]
+    lines += [fmt(row) for row in body]
+    return "\n".join(lines)
+
+
+def _render_csv(section: CsvSection, root: Path) -> str:
+    """Header + the first `rows` data rows (0 = header only, -1 = all),
+    narrowed to `columns` when set, emitted as an aligned markdown table.
+
+    The delimiter is sniffed (comma, semicolon, tab, pipe) and a UTF-8 BOM is
+    tolerated. Column names that don't exist in the header are ignored; if
+    none of the requested columns exist, all columns are kept rather than
+    emitting an empty table. When rows are cut, a trailing marker says how
+    many were omitted, so the model knows it's looking at a sample.
+    """
+    text = _read_repo_file(section.path, root).lstrip("\ufeff")
+    reader = csv.reader(io.StringIO(text), delimiter=_sniff_delimiter(text[:8192]))
+    raw_header = next(reader, None)
+    if raw_header is None:
         return ""
+    header = [name.strip() for name in raw_header]
 
     indices = list(range(len(header)))
     if section.columns:
@@ -104,17 +134,15 @@ def _render_csv(section: CsvSection, root: Path) -> str:
         if selected:
             indices = selected
 
-    out_rows = [[header[i] for i in indices]]
+    kept: list[list[str]] = []
     omitted = 0
     for n, row in enumerate(reader):
         if section.rows != -1 and n >= section.rows:
             omitted += 1
             continue
-        out_rows.append([row[i] if i < len(row) else "" for i in indices])
+        kept.append([row[i] if i < len(row) else "" for i in indices])
 
-    buf = io.StringIO()
-    csv.writer(buf, lineterminator="\n").writerows(out_rows)
-    content = buf.getvalue().rstrip("\n")
+    content = _markdown_table([header[i] for i in indices], kept)
     if omitted:
         content += f"\n... ({omitted} more row{'s' if omitted != 1 else ''})"
     return content

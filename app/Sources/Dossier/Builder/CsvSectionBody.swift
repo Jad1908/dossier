@@ -36,33 +36,53 @@ struct CsvSectionBody: View {
                     }),
                 options: [(false, "First rows"), (true, "Whole file")])
 
-            HStack(spacing: Theme.Spacing.md) {
-                if !wholeFile {
-                    Stepper(value: Binding(get: { rows }, set: { set(rows: $0) }),
+            if !wholeFile {
+                HStack(spacing: Theme.Spacing.md) {
+                    Stepper(value: Binding(get: { max(rows, 1) },
+                                           set: { set(rows: $0) }),
                             in: 1...9999) {
-                        Text("Rows: \(rows)")
+                        Text(headerOnly ? "Rows: —" : "Rows: \(rows)")
+                            .font(Theme.Typography.bodyMd)
+                            .foregroundStyle(headerOnly ? Theme.Colors.ash
+                                                        : Theme.Colors.body)
+                    }
+                    .disabled(headerOnly)
+
+                    Toggle(isOn: Binding(
+                        get: { headerOnly },
+                        set: { set(rows: $0 ? 0 : SectionKind.defaultCSVRows) })) {
+                        Text("Header only")
                             .font(Theme.Typography.bodyMd)
                             .foregroundStyle(Theme.Colors.body)
                     }
-                }
-                Button {
-                    showColumns = true
-                } label: {
-                    Label(columnsLabel, systemImage: "checklist")
-                }
-                .buttonStyle(TertiaryButtonStyle())
-                .fixedSize()
-                .help("Choose which columns to keep")
-                .popover(isPresented: $showColumns, arrowEdge: .bottom) {
-                    CsvColumnsPopover(
-                        url: model.projectURL?.appendingPathComponent(path),
-                        selected: columns,
-                        apply: { set(columns: $0) })
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .tint(Theme.Colors.accentPrimary)
+                    .help("Take just the first line — the column names")
                 }
             }
-            .animation(Theme.Motion.smooth, value: wholeFile)
+
+            Button {
+                showColumns = true
+            } label: {
+                Label(columnsLabel, systemImage: "checklist")
+            }
+            .buttonStyle(TertiaryButtonStyle())
+            .fixedSize()
+            .help("Choose which columns to keep")
+            .popover(isPresented: $showColumns, arrowEdge: .bottom) {
+                CsvColumnsPopover(
+                    url: model.projectURL?.appendingPathComponent(path),
+                    selected: columns,
+                    apply: { set(columns: $0) })
+            }
         }
+        .animation(Theme.Motion.smooth, value: wholeFile)
+        .animation(Theme.Motion.snappy, value: headerOnly)
     }
+
+    /// rows == 0 — emit just the header line (the column names).
+    private var headerOnly: Bool { rows == 0 }
 
     private var columnsLabel: String {
         columns.isEmpty ? "Columns: all" : "Columns: \(columns.count)"
@@ -194,27 +214,73 @@ private struct CsvColumnsPopover: View {
 // MARK: - Header parsing
 
 /// Reads just the first record of a csv file — the column names the picker
-/// offers. Quote-aware (quoted commas, newlines, and "" escapes), and capped
-/// at 64 KB: a header longer than that isn't a header.
+/// offers. Robust to the exports seen in the wild: the delimiter is sniffed
+/// (comma, semicolon, tab, pipe — Excel writes `;` in many locales), a UTF-8
+/// BOM is tolerated, fields are quote-aware ("" escapes, embedded newlines),
+/// and names are whitespace-trimmed — matching how the engine reads the file,
+/// so picked names line up with what it filters on. Capped at 64 KB: a header
+/// longer than that isn't a header.
 enum CSVHeader {
+    private static let candidateDelimiters: [Character] = [",", ";", "\t", "|"]
+
     static func columns(of url: URL) -> [String] {
         guard let handle = try? FileHandle(forReadingFrom: url),
               let data = try? handle.read(upToCount: 1 << 16),
               !data.isEmpty
         else { return [] }
         try? handle.close()
-        let text = String(decoding: data, as: UTF8.self)
+        var text = String(decoding: data, as: UTF8.self)
+        if text.hasPrefix("\u{FEFF}") { text.removeFirst() }
 
-        var fields: [String] = []
-        var field = ""
+        let record = firstRecord(of: text)
+        return parse(record: record, delimiter: sniffDelimiter(in: record))
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+    }
+
+    /// Everything up to the first record break — a newline outside quotes.
+    private static func firstRecord(of text: String) -> Substring {
         var inQuotes = false
         var i = text.startIndex
         while i < text.endIndex {
             let ch = text[i]
+            if ch == "\"" {
+                // An escaped "" toggles twice — net unchanged, as it should be.
+                inQuotes.toggle()
+            } else if !inQuotes, ch == "\n" || ch == "\r" {
+                return text[text.startIndex..<i]
+            }
+            i = text.index(after: i)
+        }
+        return text[...]
+    }
+
+    /// The candidate that splits the record the most, quoted runs excluded.
+    /// Ties keep candidate order, so a lone comma still beats a lone pipe.
+    private static func sniffDelimiter(in record: Substring) -> Character {
+        var counts: [Character: Int] = [:]
+        var inQuotes = false
+        for ch in record {
+            if ch == "\"" { inQuotes.toggle() }
+            else if !inQuotes, candidateDelimiters.contains(ch) {
+                counts[ch, default: 0] += 1
+            }
+        }
+        return candidateDelimiters.max { (counts[$0] ?? 0) < (counts[$1] ?? 0) }
+            ?? ","
+    }
+
+    private static func parse(record: Substring,
+                              delimiter: Character) -> [String] {
+        var fields: [String] = []
+        var field = ""
+        var inQuotes = false
+        var i = record.startIndex
+        while i < record.endIndex {
+            let ch = record[i]
             if inQuotes {
                 if ch == "\"" {
-                    let next = text.index(after: i)
-                    if next < text.endIndex, text[next] == "\"" {
+                    let next = record.index(after: i)
+                    if next < record.endIndex, record[next] == "\"" {
                         field.append("\"")   // escaped quote
                         i = next
                     } else {
@@ -223,22 +289,16 @@ enum CSVHeader {
                 } else {
                     field.append(ch)
                 }
+            } else if ch == "\"" {
+                inQuotes = true
+            } else if ch == delimiter {
+                fields.append(field); field = ""
             } else {
-                switch ch {
-                case "\"":
-                    inQuotes = true
-                case ",":
-                    fields.append(field); field = ""
-                case "\n", "\r":
-                    fields.append(field)
-                    return fields
-                default:
-                    field.append(ch)
-                }
+                field.append(ch)
             }
-            i = text.index(after: i)
+            i = record.index(after: i)
         }
-        fields.append(field)   // single-record file with no trailing newline
+        fields.append(field)
         return fields
     }
 }
