@@ -73,8 +73,7 @@ struct CsvSectionBody: View {
             .popover(isPresented: $showColumns, arrowEdge: .bottom) {
                 CsvColumnsPopover(
                     url: model.projectURL?.appendingPathComponent(path),
-                    selected: columns,
-                    apply: { set(columns: $0) })
+                    section: $binding)
             }
         }
         .animation(Theme.Motion.smooth, value: wholeFile)
@@ -140,22 +139,46 @@ struct CsvSectionBody: View {
 /// everything checked; storing [] again the moment all boxes are checked keeps
 /// the TOML clean. The last checked column can't be unchecked — an empty pick
 /// would silently mean "all" again, which is exactly the opposite.
+///
+/// Works on a live Binding to the section, never a captured snapshot: popover
+/// content closures don't reliably re-evaluate when the presenter updates, and
+/// a captured selection went stale after the first toggle (every later toggle
+/// recomputed from the original state).
 private struct CsvColumnsPopover: View {
     let url: URL?
-    let selected: [String]
-    let apply: ([String]) -> Void
+    @Binding var section: SpecSection
 
     @State private var header: [String]?   // nil while loading
 
+    private var selected: [String] {
+        if case let .csv(_, _, c) = section.kind { return c }
+        return []
+    }
+
+    private func apply(_ columns: [String]) {
+        if case let .csv(path, rows, _) = section.kind {
+            section.kind = .csv(path: path, rows: rows, columns: columns)
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Columns")
-                .font(Theme.Typography.headingSm)
-                .foregroundStyle(Theme.Colors.ink)
+            HStack(spacing: Theme.Spacing.sm) {
+                Text("Columns")
+                    .font(Theme.Typography.headingSm)
+                    .foregroundStyle(Theme.Colors.ink)
+                Spacer()
+                if let names = header, !names.isEmpty {
+                    Text(selected.isEmpty ? "all \(names.count)"
+                                          : "\(selected.count) of \(names.count)")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.mute)
+                }
+            }
             content
         }
         .padding(Theme.Spacing.lg)
-        .frame(width: 240)
+        .frame(width: 320)
         .task { await load() }
     }
 
@@ -171,7 +194,7 @@ private struct CsvColumnsPopover: View {
                 .foregroundStyle(Theme.Colors.mute)
         case .some(let names):
             ScrollView {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     ForEach(Array(names.enumerated()), id: \.offset) { _, name in
                         Toggle(isOn: toggleBinding(for: name, header: names)) {
                             Text(name.isEmpty ? "(unnamed)" : name)
@@ -183,11 +206,10 @@ private struct CsvColumnsPopover: View {
                     }
                 }
             }
-            .frame(maxHeight: 260)
-            if !selected.isEmpty {
-                Button("Select all") { apply([]) }
-                    .buttonStyle(SecondaryButtonStyle())
-            }
+            .frame(maxHeight: 380)
+            Button("Select all") { apply([]) }
+                .buttonStyle(SecondaryButtonStyle())
+                .disabled(selected.isEmpty)
         }
     }
 
