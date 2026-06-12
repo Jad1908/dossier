@@ -4,11 +4,59 @@ import SwiftUI
 // a file row) or a file section's magnifier in the builder. One panel at a
 // time: previewing another file repoints the same panel rather than stacking.
 
-/// What the panel is showing — the repo-relative path plus its resolved URL.
+/// What the panel is showing — the repo-relative path plus its resolved URL,
+/// and where the opening click landed (window coordinates, top-left origin)
+/// so the panel can appear next to it rather than dead-center.
 struct FilePreviewRequest: Equatable {
     let relativePath: String
     let url: URL
+    let anchor: CGPoint?
     var name: String { url.lastPathComponent }
+}
+
+/// Hosts the panel over the project view and places it next to the click that
+/// opened it, clamped so it never pokes outside the window. The transparent
+/// remainder of the overlay passes clicks through to the panes beneath.
+struct FilePreviewOverlay: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        GeometryReader { geo in
+            if let request = model.filePreview {
+                let position = position(for: request, in: geo)
+                FilePreviewPanel(request: request)
+                    .position(position)
+                    // Grow out of where it lands, not the window center.
+                    .transition(.scale(scale: 0.94, anchor: UnitPoint(
+                        x: position.x / max(geo.size.width, 1),
+                        y: position.y / max(geo.size.height, 1)))
+                        .combined(with: .opacity))
+            }
+        }
+    }
+
+    /// The panel's center: top-leading corner just below-right of the click,
+    /// pulled back inside the overlay when the click is near an edge.
+    private func position(for request: FilePreviewRequest,
+                          in geo: GeometryProxy) -> CGPoint {
+        let bounds = geo.size
+        let size = FilePreviewPanel.size
+        guard let anchor = request.anchor else {
+            return CGPoint(x: bounds.width / 2, y: bounds.height / 2)
+        }
+        // The anchor is in window points; this overlay lives inside the zoom
+        // transform, so map through the rendered-vs-laid-out scale.
+        let global = geo.frame(in: .global)
+        let scale = max(global.width / max(bounds.width, 1), 0.01)
+        let local = CGPoint(x: (anchor.x - global.minX) / scale,
+                            y: (anchor.y - global.minY) / scale)
+        let margin = Theme.Spacing.md
+        var origin = CGPoint(x: local.x + 14, y: local.y + 10)
+        origin.x = max(min(origin.x, bounds.width - size.width - margin), margin)
+        origin.y = max(min(origin.y, bounds.height - size.height - margin), margin)
+        return CGPoint(x: origin.x + size.width / 2,
+                       y: origin.y + size.height / 2)
+    }
 }
 
 /// A small floating window embedded in the app: a card that hovers over the
@@ -33,21 +81,27 @@ struct FilePreviewPanel: View {
     /// Beyond this the preview shows a prefix — it's a peek, not an editor.
     private static let byteLimit = 1 << 20   // 1 MiB
 
+    static let size = CGSize(width: 560, height: 400)
+
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider().overlay(Theme.Colors.hairline)
             body(for: content)
         }
-        .frame(width: 560, height: 400)
+        .frame(width: Self.size.width, height: Self.size.height)
         .background(Theme.Colors.surfaceCard,
                     in: RoundedRectangle(cornerRadius: Theme.Radius.lg, style: .continuous))
         .hairlineBorder(Theme.Radius.lg, color: Theme.Colors.hairlineStrong)
         .shadow(color: .black.opacity(0.28), radius: 28, y: 10)
         .offset(restingOffset + dragOffset)
-        .transition(.scale(scale: 0.94).combined(with: .opacity))
         .onExitCommand { model.closeFilePreview() }
         .task(id: request.url) { await load() }
+        // Repointed at another click: the new anchor decides the position, so
+        // any leftover drag from the previous spot would land it off-target.
+        .onChange(of: request) {
+            withAnimation(Theme.Motion.smooth) { restingOffset = .zero }
+        }
     }
 
     // MARK: - Header (the drag handle)

@@ -67,11 +67,7 @@ struct ContentView: View {
         .navigationSplitViewStyle(.balanced)
         // The floating file preview hovers over the whole project view, above
         // all three panes, so it never reflows the layout under it.
-        .overlay {
-            if let request = model.filePreview {
-                FilePreviewPanel(request: request)
-            }
-        }
+        .overlay { FilePreviewOverlay() }
     }
 
     // MARK: - Toolbar (DESIGN.md §toolbar)

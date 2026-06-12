@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import Observation
 
 /// A spec in the open folder: nil name = the default context.toml; a name maps
@@ -55,8 +56,22 @@ final class AppModel {
         withAnimation(Theme.Motion.smooth) {
             filePreview = FilePreviewRequest(
                 relativePath: relativePath,
-                url: projectURL.appendingPathComponent(relativePath))
+                url: projectURL.appendingPathComponent(relativePath),
+                anchor: Self.currentClickAnchor())
         }
+    }
+
+    /// The mouse position at the moment the preview was requested, in the key
+    /// window's content coordinates (top-left origin) — the same space as
+    /// SwiftUI's `.global`. Nil when there's no window to resolve against,
+    /// which the panel treats as "center it".
+    private static func currentClickAnchor() -> CGPoint? {
+        guard let window = NSApp.keyWindow, let content = window.contentView
+        else { return nil }
+        let inWindow = window.convertPoint(fromScreen: NSEvent.mouseLocation)
+        var point = content.convert(inWindow, from: nil)
+        if !content.isFlipped { point.y = content.bounds.height - point.y }
+        return point
     }
 
     func closeFilePreview() {
