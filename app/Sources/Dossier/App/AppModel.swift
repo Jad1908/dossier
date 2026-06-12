@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import Observation
 
 /// A spec in the open folder: nil name = the default context.toml; a name maps
@@ -42,6 +43,40 @@ final class AppModel {
     // MARK: - Builder selection
 
     var selectedSectionID: UUID?
+
+    // MARK: - File preview
+
+    /// The file shown in the floating preview panel — opened from the explorer's
+    /// hover magnifier or a file section's magnifier. Nil = panel closed. One
+    /// panel: a second preview repoints it rather than stacking windows.
+    private(set) var filePreview: FilePreviewRequest?
+
+    func previewFile(relativePath: String) {
+        guard let projectURL else { return }
+        withAnimation(Theme.Motion.smooth) {
+            filePreview = FilePreviewRequest(
+                relativePath: relativePath,
+                url: projectURL.appendingPathComponent(relativePath),
+                anchor: Self.currentClickAnchor())
+        }
+    }
+
+    /// The mouse position at the moment the preview was requested, in the key
+    /// window's content coordinates (top-left origin) — the same space as
+    /// SwiftUI's `.global`. Nil when there's no window to resolve against,
+    /// which the panel treats as "center it".
+    private static func currentClickAnchor() -> CGPoint? {
+        guard let window = NSApp.keyWindow, let content = window.contentView
+        else { return nil }
+        let inWindow = window.convertPoint(fromScreen: NSEvent.mouseLocation)
+        var point = content.convert(inWindow, from: nil)
+        if !content.isFlipped { point.y = content.bounds.height - point.y }
+        return point
+    }
+
+    func closeFilePreview() {
+        withAnimation(Theme.Motion.smooth) { filePreview = nil }
+    }
 
     // MARK: - View zoom
 
@@ -103,6 +138,7 @@ final class AppModel {
 
     func openProject(_ url: URL) {
         projectURL = url
+        filePreview = nil   // a preview from another project would be stale
         Defaults.noteRecentProject(url)
         fileTreeRoot = FileNode(url: url, isDirectory: true, projectRoot: url)
         fileTreeRoot?.loadChildrenIfNeeded()

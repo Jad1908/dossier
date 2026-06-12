@@ -124,6 +124,18 @@ struct FileRowContent: View {
 
             Spacer(minLength: Theme.Spacing.xs)
 
+            // Magnifier — peek at the file in the floating preview panel.
+            if !isFolder, hovering {
+                Button {
+                    model.previewFile(relativePath: node.relativePath)
+                } label: {
+                    Image(systemName: "magnifyingglass").imageScale(.small)
+                }
+                .buttonStyle(IconButtonStyle())
+                .help("Preview file")
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
+            }
+
             // +/- affordance — files only (folders never map to sections, §7).
             if !isFolder, hovering || included {
                 Button {
