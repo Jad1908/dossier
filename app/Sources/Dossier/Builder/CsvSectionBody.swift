@@ -178,23 +178,31 @@ private struct CsvColumnsPopover: View {
             content
         }
         .padding(Theme.Spacing.lg)
-        .frame(width: 320)
+        .frame(width: 260)
         .task { await load() }
     }
+
+    /// One checkbox row's slice of the list height (13pt label + spacing).
+    private static let rowHeight: CGFloat = 24
+    private static let maxListHeight: CGFloat = 264   // ~11 rows, then scroll
 
     @ViewBuilder
     private var content: some View {
         switch header {
         case .none:
             ProgressView().controlSize(.small)
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, minHeight: 60)
         case .some(let names) where names.isEmpty:
             Text("Couldn't read a header row from this file.")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.mute)
         case .some(let names):
+            // The list gets an explicit height: a popover sizes to its
+            // content's IDEAL height, and a ScrollView's ideal height along
+            // its scroll axis is ~zero — left to negotiate, the whole list
+            // collapsed to a sliver.
             ScrollView {
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     ForEach(Array(names.enumerated()), id: \.offset) { _, name in
                         Toggle(isOn: toggleBinding(for: name, header: names)) {
                             Text(name.isEmpty ? "(unnamed)" : name)
@@ -205,8 +213,10 @@ private struct CsvColumnsPopover: View {
                         .toggleStyle(.checkbox)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxHeight: 380)
+            .frame(height: min(CGFloat(names.count) * Self.rowHeight,
+                               Self.maxListHeight))
             Button("Select all") { apply([]) }
                 .buttonStyle(SecondaryButtonStyle())
                 .disabled(selected.isEmpty)
