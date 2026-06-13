@@ -184,19 +184,22 @@ private struct SpecSwitcher: View {
                     .font(Theme.Typography.caption).foregroundStyle(Theme.Colors.mute)
                 TextField("name", text: $creatingName)
                     .textFieldStyle(.roundedBorder).frame(width: 220)
+                    .onSubmit(createSpec)
                 HStack {
                     Spacer()
                     Button("Cancel") { showCreate = false }
                         .buttonStyle(SecondaryButtonStyle())
-                    Button("Create") {
-                        model.createSpec(named: creatingName.isEmpty ? nil : creatingName)
-                        creatingName = ""
-                        showCreate = false
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
+                    Button("Create", action: createSpec)
+                        .buttonStyle(PrimaryButtonStyle())
                 }
             }
             .padding(Theme.Spacing.lg)
         }
+    }
+
+    private func createSpec() {
+        model.createSpec(named: creatingName.isEmpty ? nil : creatingName)
+        creatingName = ""
+        showCreate = false
     }
 }
