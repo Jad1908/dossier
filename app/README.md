@@ -1,7 +1,7 @@
 # Dossier — macOS app
 
 A native macOS front end for the `dossier` CLI: a three-pane editor for a
-`context.toml` spec with a live preview of the rendered prompt. The app **never
+`.dossier/context.toml` spec with a live preview of the rendered prompt. The app **never
 renders prompts itself** — it edits the spec on disk and shells out to
 `dossier forge --format json` for every preview. There is one source of truth
 for output (the engine).
@@ -44,6 +44,16 @@ app/
   The app auto-detects the binary (login-shell `PATH`, then the usual install
   locations); you can also set the path in **Settings**.
 
+  **Developing both together?** Use an editable engine instead, so CLI source
+  edits take effect without reinstalling:
+  ```sh
+  cd app && make dev-engine
+  ```
+  The app and the engine must agree on where specs live (under `.dossier/`); a
+  stale `uv tool install` is the usual cause of a "spec file not found" preview
+  after changing the CLI's file layout. `make dev-engine` points the installed
+  `dossier` at this repo's `src/`, so they can't drift.
+
 ## Build & run
 
 ```sh
@@ -59,8 +69,9 @@ open Dossier.app
 
 ## How it works
 
-- **Spec I/O** — the app reads and writes `context.toml` / `context.<name>.toml`
-  and `dossier.toml` with [TOMLKit](https://github.com/LebJe/TOMLKit). Writing
+- **Spec I/O** — the app reads and writes `.dossier/context.toml` /
+  `.dossier/context.<name>.toml` and `.dossier/config.toml` with
+  [TOMLKit](https://github.com/LebJe/TOMLKit). Writing
   reserializes the file and **drops hand-written comments** (an accepted v1
   trade-off — app-managed specs are app-managed).
 - **Preview** — on each edit the spec is written to disk (debounced ~300 ms) and
@@ -76,10 +87,10 @@ open Dossier.app
 
 `DESKTOP_APP_SPEC.md` §5/§6 sketch per-`tree`-section `include`/`exclude` lists.
 The engine's `TreeSection` (authoritative — `src/dossier/spec.py`) forbids those
-fields; tree filters live in `dossier.toml`'s `[tree]` table. The app follows
-the engine: tree cards expose `max_depth` + `use_gitignore`, and the
+fields; tree filters live in `.dossier/config.toml`'s `[tree]` table. The app
+follows the engine: tree cards expose `max_depth` + `use_gitignore`, and the
 include/exclude pattern lists are edited in the **Prompt Library** sheet (which
-writes `dossier.toml`).
+writes `.dossier/config.toml`).
 
 ## Contract test
 

@@ -9,12 +9,21 @@ BUNDLE   = $(APP_NAME).app
 CONFIG   = release
 BIN      = .build/$(CONFIG)/$(APP_NAME)
 
-.PHONY: all app build run icon sign clean
+.PHONY: all app build run icon sign clean dev-engine
 
 all: app
 
 build:
 	swift build -c $(CONFIG)
+
+# Install the `dossier` CLI engine editable, pointing at this repo's working
+# tree. The app shells out to `dossier` for every preview, so its engine and the
+# app must agree on where specs live (`.dossier/`). An editable install means
+# source edits under ../src take effect immediately — no reinstall after each
+# change. Re-run only if dependencies change. Requires `uv`.
+dev-engine:
+	uv tool install --force --reinstall --no-cache --editable --from .. dossier
+	@echo "Installed editable dossier engine → $$(command -v dossier)"
 
 # Generate AppIcon.icns from a 1024x1024 Icon.png (provide your own logo there).
 # Skipped automatically by `app` when Icon.png is absent.

@@ -1,7 +1,7 @@
 import Foundation
 import TOMLKit
 
-// Reads and writes context.toml / context.<name>.toml and dossier.toml using a
+// Reads and writes .dossier/context.toml / context.<name>.toml and config.toml using a
 // Swift TOML library (DESKTOP_APP_SPEC §2). The engine remains the reader at
 // render time; this is the editor side.
 //
@@ -109,7 +109,7 @@ enum SpecIO {
         try write(root, to: url)
     }
 
-    // MARK: - Project config (dossier.toml)
+    // MARK: - Project config (.dossier/config.toml)
 
     static func loadConfig(at url: URL) throws -> ProjectConfig {
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -185,6 +185,10 @@ enum SpecIO {
     }
 
     private static func write(_ table: TOMLTable, to url: URL) throws {
+        // Specs and config live in a `.dossier/` folder that may not exist yet.
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true)
         let text = table.convert(to: .toml, options: [.allowMultilineStrings])
         try text.write(to: url, atomically: true, encoding: .utf8)
     }
