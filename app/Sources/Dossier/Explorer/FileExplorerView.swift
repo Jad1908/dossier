@@ -19,7 +19,7 @@ struct FileExplorerView: View {
                 LazyVStack(alignment: .leading, spacing: 1) {
                     if let root = model.fileTreeRoot {
                         if search.isEmpty {
-                            ForEach(root.childrenLoaded) { node in
+                            ForEach(root.children ?? []) { node in
                                 FileNodeRow(node: node, depth: 0)
                             }
                         } else {
@@ -51,14 +51,6 @@ struct FileExplorerView: View {
 
 // MARK: - Tree rows
 
-private extension FileNode {
-    /// Loads immediate children (idempotent) and returns them for display.
-    var childrenLoaded: [FileNode] {
-        loadChildrenIfNeeded()
-        return children ?? []
-    }
-}
-
 /// One row in the tree. Folders disclose recursively; files carry the +/- and
 /// included state. Expansion is local view state.
 struct FileNodeRow: View {
@@ -70,10 +62,13 @@ struct FileNodeRow: View {
         if node.isDirectory {
             FileRowContent(node: node, depth: depth, isFolder: true,
                            expanded: expanded) {
+                // Load before expanding so the children are ready by the time
+                // the body re-renders — never mutate node state mid-render.
+                node.loadChildrenIfNeeded()
                 withAnimation(Theme.Motion.smooth) { expanded.toggle() }
             }
             if expanded {
-                ForEach(node.childrenLoaded) { child in
+                ForEach(node.children ?? []) { child in
                     FileNodeRow(node: child, depth: depth + 1)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }

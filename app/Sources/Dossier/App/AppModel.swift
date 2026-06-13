@@ -31,6 +31,10 @@ final class AppModel {
     private(set) var projectURL: URL?
     private(set) var fileTreeRoot: FileNode?
     private(set) var availableSpecs: [SpecRef] = []
+
+    /// Watches the open project for on-disk changes so the explorer stays in
+    /// sync with files created outside the in-app actions. Not observed.
+    @ObservationIgnored private var fileWatcher: FileSystemWatcher?
     var currentSpec = SpecRef(name: nil)
 
     // MARK: - Loaded documents
@@ -142,6 +146,7 @@ final class AppModel {
         Defaults.noteRecentProject(url)
         fileTreeRoot = FileNode(url: url, isDirectory: true, projectRoot: url)
         fileTreeRoot?.loadChildrenIfNeeded()
+        watchProjectFiles(url)
         refreshSpecList()
         // Prefer the default spec if present, else the first discovered one.
         currentSpec = availableSpecs.first { $0.name == nil }
@@ -230,6 +235,7 @@ final class AppModel {
             try? SpecIO.writeSpec(.starter, to: url)
         }
         refreshSpecList()
+        reloadFileTree()
         switchSpec(to: ref)
     }
 
@@ -264,14 +270,26 @@ final class AppModel {
         guard let url = specURL(for: currentSpec) else { return }
         try? SpecIO.writeSpec(.starter, to: url)
         refreshSpecList()
+        reloadFileTree()
         loadSpecAndConfig()
         render()
     }
 
     // MARK: - File tree refresh
 
+    /// Start (or restart) watching the project for files that appear outside the
+    /// in-app actions, refreshing the explorer when they do.
+    private func watchProjectFiles(_ url: URL) {
+        fileWatcher = FileSystemWatcher(url: url) { [weak self] in
+            MainActor.assumeIsolated { self?.reloadFileTree() }
+        }
+    }
+
+    /// Refresh the tree from disk in place. `FileNode` is `@Observable`, so each
+    /// reloaded directory whose contents changed re-renders its own row — files
+    /// added inside an expanded subfolder surface, not just root-level ones.
     func reloadFileTree() {
-        fileTreeRoot?.reload()
+        fileTreeRoot?.reloadLoadedChildren()
     }
 
     // MARK: - SpecSection mutations (all autosave + re-render)

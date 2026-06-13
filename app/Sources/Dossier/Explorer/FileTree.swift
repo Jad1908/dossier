@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 // The native file-explorer model (DESKTOP_APP_SPEC §7): a plain folder walk of
 // the project, lazily loaded per directory. It shows everything on disk and
@@ -6,7 +7,10 @@ import Foundation
 // job, rendered by the engine, not here.
 //
 // A reference type so SwiftUI rows can lazily populate children on expansion
-// without rebuilding the whole tree.
+// without rebuilding the whole tree. `@Observable` so a row re-renders when its
+// own `children` change — that's what lets an in-place reload surface a file
+// added inside an already-expanded subfolder, not just at the root.
+@Observable
 final class FileNode: Identifiable, Hashable {
     let url: URL
     let isDirectory: Bool
@@ -55,10 +59,32 @@ final class FileNode: Identifiable, Hashable {
         }
     }
 
-    /// Force a reload of children (e.g. after files change on disk).
-    func reload() {
-        children = nil
-        loadChildrenIfNeeded()
+    /// Re-read from disk every directory that's already been loaded, in place.
+    /// New files appear, deleted ones drop, and surviving nodes keep their
+    /// identity — so loaded subtrees and each row's expansion state are
+    /// preserved, and the reload recurses into them. Collapsed (never-loaded)
+    /// directories are left alone; they read fresh when first expanded.
+    func reloadLoadedChildren() {
+        guard isDirectory, let existing = children else { return }
+
+        let byURL = Dictionary(existing.map { ($0.url, $0) }) { a, _ in a }
+        let fm = FileManager.default
+        let entries = (try? fm.contentsOfDirectory(
+            at: url,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [])) ?? []
+
+        let merged: [FileNode] = entries.map { child in
+            if let kept = byURL[child] { return kept }   // reuse → keep subtree/state
+            let isDir = (try? child.resourceValues(forKeys: [.isDirectoryKey]))?
+                .isDirectory ?? false
+            return FileNode(url: child, isDirectory: isDir, projectRoot: projectRoot)
+        }
+        children = merged.sorted { a, b in
+            if a.isDirectory != b.isDirectory { return a.isDirectory }
+            return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+        }
+        for child in merged { child.reloadLoadedChildren() }
     }
 
     static func == (lhs: FileNode, rhs: FileNode) -> Bool { lhs.url == rhs.url }
