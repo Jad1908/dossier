@@ -25,7 +25,9 @@ ERROR_KINDS = {
 
 
 def _spec(tmp_path: Path, body: str) -> None:
-    (tmp_path / "context.toml").write_text(body, encoding="utf-8")
+    spec = tmp_path / ".dossier" / "context.toml"
+    spec.parent.mkdir(parents=True, exist_ok=True)
+    spec.write_text(body, encoding="utf-8")
 
 
 def _forge_json(tmp_path: Path, *extra: str) -> dict:

@@ -11,7 +11,7 @@ from typing import List, Optional
 
 import typer
 
-from .config import CONFIG_FILENAME, DossierConfig, load_config
+from .config import CONFIG_FILENAME, DOSSIER_DIR, DossierConfig, load_config
 from .render import MissingPathsError, MissingPromptsError, RenderContext
 from .render import render as render_prompt
 from .report import build_result
@@ -53,13 +53,13 @@ def _spec_path(root: Path, spec: Optional[Path], name: Optional[str]) -> Path:
     """Resolve which spec file to use.
 
     Precedence: an explicit --spec path wins; otherwise a positional NAME maps
-    to context.<name>.toml; otherwise the default context.toml.
+    to .dossier/context.<name>.toml; otherwise the default .dossier/context.toml.
     """
     if spec is not None:
         return spec
     if name:
-        return root / f"context.{name}.toml"
-    return root / "context.toml"
+        return root / DOSSIER_DIR / f"context.{name}.toml"
+    return root / DOSSIER_DIR / "context.toml"
 
 
 def _effective_output(spec: Spec, config: DossierConfig) -> OutputConfig:
@@ -78,7 +78,8 @@ def _effective_output(spec: Spec, config: DossierConfig) -> OutputConfig:
 def init(
     name: Optional[str] = typer.Argument(
         None,
-        help="Spec name; writes context.<name>.toml (default: context.toml).",
+        help="Spec name; writes .dossier/context.<name>.toml (default: "
+        ".dossier/context.toml).",
     ),
     root: Path = typer.Option(
         Path.cwd(), "--root", help="Repo root (defaults to cwd)."
@@ -101,7 +102,8 @@ def init(
 def forge(
     name: Optional[str] = typer.Argument(
         None,
-        help="Spec name; reads context.<name>.toml (default: context.toml).",
+        help="Spec name; reads .dossier/context.<name>.toml (default: "
+        ".dossier/context.toml).",
     ),
     root: Path = typer.Option(
         Path.cwd(), "--root", help="Repo root (defaults to cwd)."
@@ -110,7 +112,8 @@ def forge(
         None, "--spec", help="Explicit spec path (overrides NAME)."
     ),
     config: Optional[Path] = typer.Option(
-        None, "--config", help=f"Config path (defaults to <root>/{CONFIG_FILENAME})."
+        None, "--config",
+        help=f"Config path (defaults to <root>/{DOSSIER_DIR}/{CONFIG_FILENAME})."
     ),
     include: Optional[List[str]] = typer.Option(
         None, "--include", help="Force-show a dir/glob in the tree (repeatable)."
@@ -136,7 +139,7 @@ def forge(
 ) -> None:
     """Forge the prompt from the spec."""
     spec_path = _spec_path(root, spec, name)
-    config_path = config if config is not None else root / CONFIG_FILENAME
+    config_path = config if config is not None else root / DOSSIER_DIR / CONFIG_FILENAME
 
     if format not in ("text", "json"):
         _err(f"unknown --format {format!r}; expected 'text' or 'json'.")

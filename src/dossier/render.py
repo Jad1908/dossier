@@ -13,7 +13,7 @@ from .spec import CsvSection, FileSection, Spec, TextSection
 class RenderContext:
     """Resolved inputs that sections need beyond the spec itself.
 
-    `prompts` is the [prompts] library from dossier.toml; `tree_exclude` /
+    `prompts` is the [prompts] library from .dossier/config.toml; `tree_exclude` /
     `tree_include` are the effective tree filters (config + CLI combined).
     """
 
