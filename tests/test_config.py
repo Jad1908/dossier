@@ -22,7 +22,7 @@ def _write(path: Path, content: str) -> Path:
 
 
 def test_missing_config_returns_empty(tmp_path: Path):
-    cfg = load_config(tmp_path / "dossier.toml")
+    cfg = load_config(tmp_path / "config.toml")
     assert cfg == DossierConfig()
     assert cfg.output is None
     assert cfg.prompts == {}
@@ -31,7 +31,7 @@ def test_missing_config_returns_empty(tmp_path: Path):
 
 def test_config_parses_all_blocks(tmp_path: Path):
     p = _write(
-        tmp_path / "dossier.toml",
+        tmp_path / "config.toml",
         """
         [output]
         copy = false
@@ -57,7 +57,7 @@ def test_config_parses_all_blocks(tmp_path: Path):
 
 
 def test_malformed_config_raises(tmp_path: Path):
-    p = _write(tmp_path / "dossier.toml", "[tree]\nexclude = 5\n")
+    p = _write(tmp_path / "config.toml", "[tree]\nexclude = 5\n")
     with pytest.raises(SpecError):
         load_config(p)
 

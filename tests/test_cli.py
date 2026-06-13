@@ -10,18 +10,18 @@ runner = CliRunner()
 def test_init_default_writes_context_toml(tmp_path: Path):
     result = runner.invoke(app, ["init", "--root", str(tmp_path)])
     assert result.exit_code == 0
-    assert (tmp_path / "context.toml").exists()
+    assert (tmp_path / ".dossier" / "context.toml").exists()
 
 
 def test_init_named_writes_context_name_toml(tmp_path: Path):
     result = runner.invoke(app, ["init", "auth", "--root", str(tmp_path)])
     assert result.exit_code == 0
-    assert (tmp_path / "context.auth.toml").exists()
-    assert not (tmp_path / "context.toml").exists()
+    assert (tmp_path / ".dossier" / "context.auth.toml").exists()
+    assert not (tmp_path / ".dossier" / "context.toml").exists()
 
 
 def test_init_refuses_overwrite_named(tmp_path: Path):
-    (tmp_path / "context.api.toml").write_text("x", encoding="utf-8")
+    _dossier(tmp_path).joinpath("context.api.toml").write_text("x", encoding="utf-8")
     result = runner.invoke(app, ["init", "api", "--root", str(tmp_path)])
     assert result.exit_code == 1
     assert "refusing to overwrite" in result.output
@@ -44,7 +44,7 @@ def test_forge_default_when_no_name(tmp_path: Path):
 
 def test_explicit_spec_overrides_name(tmp_path: Path):
     runner.invoke(app, ["init", "real", "--root", str(tmp_path)])
-    spec = tmp_path / "context.real.toml"
+    spec = tmp_path / ".dossier" / "context.real.toml"
     result = runner.invoke(
         app,
         ["forge", "ignored", "--root", str(tmp_path),
@@ -61,14 +61,20 @@ def test_forge_missing_named_spec_errors(tmp_path: Path):
     assert "context.nope.toml" in result.output
 
 
+def _dossier(tmp_path: Path) -> Path:
+    d = tmp_path / ".dossier"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def _spec(tmp_path: Path, body: str) -> None:
-    (tmp_path / "context.toml").write_text(body, encoding="utf-8")
+    _dossier(tmp_path).joinpath("context.toml").write_text(body, encoding="utf-8")
 
 
 def test_config_output_default_suppresses_stdout(tmp_path: Path):
     # Spec has no [output]; config turns stdout off.
     _spec(tmp_path, '[[section]]\ntype="text"\ntitle="R"\nbody="hello"\n')
-    (tmp_path / "dossier.toml").write_text(
+    _dossier(tmp_path).joinpath("config.toml").write_text(
         "[output]\nstdout = false\ncopy = false\n", encoding="utf-8"
     )
     result = runner.invoke(app, ["forge", "--root", str(tmp_path)])
@@ -83,7 +89,7 @@ def test_config_output_default_suppresses_stdout(tmp_path: Path):
 
 def test_config_prompt_injection(tmp_path: Path):
     _spec(tmp_path, '[[section]]\ntype="text"\ntitle="R"\nprompt="refactor"\n')
-    (tmp_path / "dossier.toml").write_text(
+    _dossier(tmp_path).joinpath("config.toml").write_text(
         '[prompts]\nrefactor = "Refactor for readability."\n', encoding="utf-8"
     )
     result = runner.invoke(

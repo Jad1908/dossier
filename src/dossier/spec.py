@@ -34,7 +34,7 @@ class _SectionBase(BaseModel):
 class TextSection(_SectionBase):
     type: Literal["text"]
     # Exactly one of `body` (inline text) or `prompt` (a name resolved from
-    # the [prompts] table in dossier.toml) must be provided.
+    # the [prompts] table in .dossier/config.toml) must be provided.
     body: Optional[str] = None
     prompt: Optional[str] = None
 

@@ -1,4 +1,4 @@
-"""Project-level config (`dossier.toml`).
+"""Project-level config (`.dossier/config.toml`).
 
 Holds defaults that apply across spec files: an `[output]` block, persistent
 tree `include`/`exclude` rules, and a `[prompts]` library that text sections
@@ -19,7 +19,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .spec import OutputConfig, SpecError
 
-CONFIG_FILENAME = "dossier.toml"
+# dossier's project files live in this folder under the repo root, keeping the
+# project root clean. Specs are `.dossier/context[.<name>].toml`; the config is
+# `.dossier/config.toml`.
+DOSSIER_DIR = ".dossier"
+CONFIG_FILENAME = "config.toml"
 
 
 class TreeConfig(BaseModel):
@@ -40,7 +44,7 @@ class DossierConfig(BaseModel):
 
 
 def load_config(config_path: Path, *, required: bool = False) -> DossierConfig:
-    """Load `dossier.toml`. Returns an empty config if the file is absent
+    """Load `.dossier/config.toml`. Returns an empty config if the file is absent
     (unless `required`). Raises SpecError with a user-facing message on a
     malformed file.
     """
