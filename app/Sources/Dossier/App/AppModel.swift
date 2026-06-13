@@ -53,6 +53,10 @@ final class AppModel {
     /// The last card clicked without Shift — the fixed end of a Shift-range.
     private var selectionAnchor: UUID?
 
+    /// The moving end of a Shift-range, so Shift+Arrow grows from where the last
+    /// extension left off rather than from the anchor.
+    private var selectionActiveEnd: UUID?
+
     func isSelected(_ id: UUID) -> Bool { selectedSectionIDs.contains(id) }
 
     /// The selected sections' current indices, ascending.
@@ -71,6 +75,7 @@ final class AppModel {
         } else {
             selectedSectionIDs = [id]
             selectionAnchor = id
+            selectionActiveEnd = id
         }
     }
 
@@ -82,6 +87,7 @@ final class AppModel {
             selectedSectionIDs.insert(id)
         }
         selectionAnchor = id
+        selectionActiveEnd = id
     }
 
     /// Shift-click: select the contiguous range from the anchor to this card.
@@ -93,12 +99,49 @@ final class AppModel {
         }
         let range = a <= b ? a...b : b...a
         selectedSectionIDs = Set(spec.sections[range].map(\.id))
+        selectionActiveEnd = id
         // Anchor stays put so the range can be re-stretched from the same end.
     }
 
     func clearSelection() {
         selectedSectionIDs = []
         selectionAnchor = nil
+        selectionActiveEnd = nil
+    }
+
+    // MARK: - Keyboard navigation
+
+    /// ↑/↓: move the single selection to the previous/next card. With nothing
+    /// selected, lands on the last/first card so the keyboard can take over.
+    func moveSelectionCursor(up: Bool) {
+        guard !spec.sections.isEmpty else { return }
+        let next: Int
+        if let cur = cursorIndex {
+            next = up ? max(0, cur - 1) : min(spec.sections.count - 1, cur + 1)
+        } else {
+            next = up ? spec.sections.count - 1 : 0
+        }
+        selectSection(spec.sections[next].id)
+    }
+
+    /// Shift+↑/↓: grow or shrink the range by one card from its moving end,
+    /// pivoting on the anchor.
+    func stepExtendSelection(up: Bool) {
+        guard !spec.sections.isEmpty else { return }
+        guard selectionAnchor != nil, let end = selectionActiveEnd,
+              let endIdx = spec.sections.firstIndex(where: { $0.id == end }) else {
+            moveSelectionCursor(up: up); return
+        }
+        let nextIdx = up ? max(0, endIdx - 1) : min(spec.sections.count - 1, endIdx + 1)
+        extendSelection(to: spec.sections[nextIdx].id)
+    }
+
+    /// The cursor for keyboard moves: the anchor if it's still around, else the
+    /// nearest selected edge.
+    private var cursorIndex: Int? {
+        if let a = selectionAnchor,
+           let i = spec.sections.firstIndex(where: { $0.id == a }) { return i }
+        return selectedIndices.last
     }
 
     // MARK: - File preview

@@ -5,6 +5,7 @@ import SwiftUI
 struct BuilderView: View {
     @Environment(AppModel.self) private var model
     @Binding var showPromptLibrary: Bool
+    @FocusState private var listFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -126,6 +127,36 @@ struct BuilderView: View {
                 }
                 .padding(.vertical, Theme.Spacing.xs)
                 .padding(.horizontal, Theme.Spacing.md)
+            }
+            // Keyboard navigation. The list takes focus when a card is selected,
+            // so these only fire when no text field is being edited (a focused
+            // TextEditor consumes its own arrows before they reach here).
+            .focusable()
+            .focusEffectDisabled()
+            .focused($listFocused)
+            .onChange(of: model.selectedSectionIDs) { _, ids in
+                if !ids.isEmpty { listFocused = true }
+            }
+            .onKeyPress(keys: [.upArrow, .downArrow]) { press in
+                let up = press.key == .upArrow
+                if press.modifiers.contains(.command) {
+                    up ? model.moveSelectionUp() : model.moveSelectionDown()
+                } else if press.modifiers.contains(.shift) {
+                    model.stepExtendSelection(up: up)
+                } else {
+                    model.moveSelectionCursor(up: up)
+                }
+                return .handled
+            }
+            .onKeyPress(.escape) {
+                guard !model.selectedSectionIDs.isEmpty else { return .ignored }
+                model.clearSelection()
+                return .handled
+            }
+            .onKeyPress(keys: [.delete, .deleteForward]) { _ in
+                guard !model.selectedSectionIDs.isEmpty else { return .ignored }
+                model.deleteSelection()
+                return .handled
             }
         }
     }
