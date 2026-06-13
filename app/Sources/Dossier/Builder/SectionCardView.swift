@@ -10,6 +10,13 @@ struct SectionCardView: View {
 
     private var binding: Binding<SpecSection> { model.binding(for: sectionID) }
     private var isSelected: Bool { model.isSelected(sectionID) }
+
+    /// An inline text body owns the Enter-to-edit request (it focuses its
+    /// editor); every other kind falls back to focusing the title for a rename.
+    private var isInlineText: Bool {
+        if case .text(.body) = binding.wrappedValue.kind { return true }
+        return false
+    }
     @State private var hovering = false
     @State private var titleHovering = false
     @State private var dropTargeted = false
@@ -144,6 +151,12 @@ struct SectionCardView: View {
                     if focused { model.beginEditing(sectionID) }
                     else { model.endEditing(sectionID) }
                 }
+                .onChange(of: model.editRequestID) { _, id in
+                    // Only claim the request for kinds with no text body.
+                    guard id == sectionID, !isInlineText else { return }
+                    titleFocused = true
+                    model.consumeEditRequest(sectionID)
+                }
             Image(systemName: "pencil")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(Theme.Colors.mute)
@@ -231,6 +244,11 @@ private struct TextSectionBody: View {
                     .onChange(of: editing) { _, focused in
                         if focused { model.beginEditing(binding.id) }
                         else { model.endEditing(binding.id) }
+                    }
+                    .onChange(of: model.editRequestID) { _, id in
+                        guard id == binding.id else { return }
+                        editing = true
+                        model.consumeEditRequest(binding.id)
                     }
             } else {
                 savedPromptPicker

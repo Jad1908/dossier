@@ -66,6 +66,13 @@ final class AppModel {
     func beginEditing(_ id: UUID) { editingSectionID = id }
     func endEditing(_ id: UUID) { if editingSectionID == id { editingSectionID = nil } }
 
+    /// A pending "enter edit mode" request (Enter on a selected card). The
+    /// matching card focuses its editor and then clears it.
+    private(set) var editRequestID: UUID?
+
+    func requestEdit(_ id: UUID) { editRequestID = id }
+    func consumeEditRequest(_ id: UUID) { if editRequestID == id { editRequestID = nil } }
+
     /// The selected sections' current indices, ascending.
     private var selectedIndices: [Int] {
         spec.sections.enumerated()

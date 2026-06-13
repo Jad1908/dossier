@@ -180,6 +180,14 @@ struct BuilderView: View {
                 model.deleteSelection()
                 return .handled
             }
+            // Enter on a single selected card drops into editing its text box
+            // (or its title, for sections without a text body).
+            .onKeyPress(.return) {
+                guard !isEditingText, model.selectedSectionIDs.count == 1,
+                      let id = model.selectedSectionIDs.first else { return .ignored }
+                model.requestEdit(id)
+                return .handled
+            }
         }
     }
 
