@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 // Middle pane — the prompt builder (DESKTOP_APP_SPEC §6, DESIGN.md §builder-pane).
 // The ordered list of the spec's sections as editable cards in render order.
@@ -128,17 +129,28 @@ struct BuilderView: View {
                 .padding(.vertical, Theme.Spacing.xs)
                 .padding(.horizontal, Theme.Spacing.md)
             }
-            // Keyboard navigation. The list takes focus when a card is selected,
-            // so these only fire when no text field is being edited (a focused
-            // TextEditor consumes its own arrows before they reach here).
+            // Keyboard navigation. onKeyPress on this focusable list is greedy —
+            // it fires even while a child TextEditor is being edited — so every
+            // handler that would clash with typing first bails when a text field
+            // holds the responder (isEditingText). Ctrl+Arrow is the exception:
+            // it deliberately jumps between sections even mid-edit.
             .focusable()
             .focusEffectDisabled()
             .focused($listFocused)
             .onChange(of: model.selectedSectionIDs) { _, ids in
-                if !ids.isEmpty { listFocused = true }
+                if !ids.isEmpty, !isEditingText { listFocused = true }
             }
             .onKeyPress(keys: [.upArrow, .downArrow]) { press in
                 let up = press.key == .upArrow
+                // Ctrl+Arrow: navigate between sections with priority over the
+                // field, dropping out of any text edit in progress.
+                if press.modifiers.contains(.control) {
+                    listFocused = true            // resign the field editor
+                    model.moveSelectionCursor(up: up)
+                    return .handled
+                }
+                // Everything else must leave a field being edited untouched.
+                guard !isEditingText else { return .ignored }
                 if press.modifiers.contains(.command) {
                     up ? model.moveSelectionUp() : model.moveSelectionDown()
                 } else if press.modifiers.contains(.shift) {
@@ -149,16 +161,27 @@ struct BuilderView: View {
                 return .handled
             }
             .onKeyPress(.escape) {
-                guard !model.selectedSectionIDs.isEmpty else { return .ignored }
+                guard !isEditingText, !model.selectedSectionIDs.isEmpty else {
+                    return .ignored
+                }
                 model.clearSelection()
                 return .handled
             }
             .onKeyPress(keys: [.delete, .deleteForward]) { _ in
-                guard !model.selectedSectionIDs.isEmpty else { return .ignored }
+                guard !isEditingText, !model.selectedSectionIDs.isEmpty else {
+                    return .ignored
+                }
                 model.deleteSelection()
                 return .handled
             }
         }
+    }
+
+    /// True while a text field/editor holds the window's first responder — i.e.
+    /// the user is typing. Backed by AppKit because the clashing keys are caught
+    /// by this view's greedy onKeyPress before the field would see them.
+    private var isEditingText: Bool {
+        NSApp.keyWindow?.firstResponder is NSText
     }
 
     // MARK: - Empty state
