@@ -10,8 +10,13 @@ struct BuilderView: View {
         VStack(spacing: 0) {
             header
             Divider().overlay(Theme.Colors.hairline)
+            if model.selectedSectionIDs.count > 1 {
+                selectionBar
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
             content
         }
+        .animation(Theme.Motion.smooth, value: model.selectedSectionIDs)
         .background(Theme.Colors.surface)
         // Pane-wide drop target (anywhere not claimed by a card/delimiter):
         // explorer file paths become `file` sections at the end; a section
@@ -19,7 +24,7 @@ struct BuilderView: View {
         .dropDestination(for: String.self) { payloads, _ in
             for payload in payloads {
                 if let id = SectionDrag.id(from: payload) {
-                    model.moveSection(id: id, to: model.spec.sections.count)
+                    model.dropReorder(draggedID: id, to: model.spec.sections.count)
                 } else {
                     model.addFileSection(relativePath: payload)
                 }
@@ -54,6 +59,45 @@ struct BuilderView: View {
                 .fixedSize()
         }
         .padding(Theme.Spacing.md)
+    }
+
+    // Shown while one or more cards are selected: move the whole selection as a
+    // block, delete it, or clear it. Reordering by hand stays available via drag.
+    private var selectionBar: some View {
+        let count = model.selectedSectionIDs.count
+        return HStack(spacing: Theme.Spacing.sm) {
+            Text("\(count) selected")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.accentText)
+
+            Spacer(minLength: Theme.Spacing.sm)
+
+            Button { model.moveSelectionUp() } label: {
+                Image(systemName: "chevron.up")
+            }
+            .buttonStyle(IconButtonStyle())
+            .help("Move selection up")
+
+            Button { model.moveSelectionDown() } label: {
+                Image(systemName: "chevron.down")
+            }
+            .buttonStyle(IconButtonStyle())
+            .help("Move selection down")
+
+            Button { model.deleteSelection() } label: {
+                Label("Delete", systemImage: "trash")
+                    .font(Theme.Typography.caption)
+            }
+            .buttonStyle(IconButtonStyle())
+            .help("Delete \(count) sections")
+
+            Button("Done") { model.clearSelection() }
+                .buttonStyle(TertiaryButtonStyle())
+                .fixedSize()
+        }
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.sm)
+        .background(Theme.Colors.accentSoft)
     }
 
     @ViewBuilder
