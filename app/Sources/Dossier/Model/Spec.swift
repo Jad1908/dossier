@@ -7,7 +7,7 @@ import Foundation
 // MARK: - Sections
 
 /// A text section's body comes from exactly one source: an inline body, or a
-/// named prompt resolved from dossier.toml's [prompts]. The enum makes the
+/// named prompt resolved from .dossier/config.toml's [prompts]. The enum makes the
 /// "exactly one" rule (spec.py TextSection) unrepresentable to violate.
 enum TextSource: Equatable, Hashable {
     case body(String)
@@ -16,7 +16,7 @@ enum TextSource: Equatable, Hashable {
 
 /// One of the engine's four section kinds. The per-section fields match the
 /// engine exactly: tree carries only max_depth + use_gitignore (include/exclude
-/// live in dossier.toml's [tree], not here — the engine forbids extra fields).
+/// live in .dossier/config.toml's [tree], not here — the engine forbids extra fields).
 enum SectionKind: Equatable, Hashable {
     case tree(maxDepth: Int, useGitignore: Bool)
     case file(path: String)
@@ -122,7 +122,7 @@ struct Spec: Equatable {
     }
 }
 
-// MARK: - Project config (a dossier.toml — config.py DossierConfig)
+// MARK: - Project config (a .dossier/config.toml — config.py DossierConfig)
 
 struct ProjectConfig: Equatable {
     var output: OutputSettings?

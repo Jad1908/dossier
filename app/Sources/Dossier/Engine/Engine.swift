@@ -113,7 +113,7 @@ struct Engine {
             return .engineFailure(
                 "Render timed out after \(Int(Self.timeout))s. A tree section may "
                 + "be walking a very large folder — re-enable “Respect .gitignore” "
-                + "or add the folder to dossier.toml’s [tree] exclude.")
+                + "or add the folder to .dossier/config.toml’s [tree] exclude.")
         }
 
         // Non-zero exit is reserved for usage/argument errors before any JSON

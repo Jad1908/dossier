@@ -157,10 +157,19 @@ final class AppModel {
 
     // MARK: - Spec discovery & switching
 
+    /// dossier's project files live in this folder under the project root,
+    /// keeping the root clean. Mirrors the Python CLI's `DOSSIER_DIR`.
+    static let dossierDirName = ".dossier"
+
+    /// The `.dossier/` folder under the open project (specs + config live here).
+    var dossierURL: URL? {
+        projectURL?.appendingPathComponent(Self.dossierDirName)
+    }
+
     func refreshSpecList() {
-        guard let projectURL else { availableSpecs = []; return }
+        guard let dossierURL else { availableSpecs = []; return }
         let fm = FileManager.default
-        let entries = (try? fm.contentsOfDirectory(atPath: projectURL.path)) ?? []
+        let entries = (try? fm.contentsOfDirectory(atPath: dossierURL.path)) ?? []
         var refs: [SpecRef] = []
         for entry in entries {
             if entry == "context.toml" {
@@ -176,11 +185,11 @@ final class AppModel {
     }
 
     func specURL(for ref: SpecRef) -> URL? {
-        projectURL?.appendingPathComponent(ref.fileName)
+        dossierURL?.appendingPathComponent(ref.fileName)
     }
 
     var configURL: URL? {
-        projectURL?.appendingPathComponent("dossier.toml")
+        dossierURL?.appendingPathComponent("config.toml")
     }
 
     func switchSpec(to ref: SpecRef) {
@@ -214,9 +223,9 @@ final class AppModel {
 
     /// Create a new context.<name>.toml from the starter spec, then switch to it.
     func createSpec(named name: String?) {
-        guard let projectURL else { return }
+        guard projectURL != nil else { return }
         let ref = SpecRef(name: name?.isEmpty == true ? nil : name)
-        let url = projectURL.appendingPathComponent(ref.fileName)
+        guard let url = specURL(for: ref) else { return }
         if !FileManager.default.fileExists(atPath: url.path) {
             try? SpecIO.writeSpec(.starter, to: url)
         }
@@ -395,7 +404,7 @@ final class AppModel {
             })
     }
 
-    // MARK: - Config (dossier.toml) mutations
+    // MARK: - Config (.dossier/config.toml) mutations
 
     func saveConfig(_ newConfig: ProjectConfig) {
         config = newConfig

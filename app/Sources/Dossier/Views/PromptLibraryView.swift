@@ -1,7 +1,7 @@
 import SwiftUI
 
 // The prompt library + tree-filter editor (DESKTOP_APP_SPEC §6, §11): edits the
-// [prompts] table and [tree] include/exclude lists in dossier.toml. A text
+// [prompts] table and [tree] include/exclude lists in .dossier/config.toml. A text
 // section can reference a saved prompt by name instead of an inline body.
 struct PromptLibraryView: View {
     @Environment(AppModel.self) private var model
@@ -39,7 +39,7 @@ struct PromptLibraryView: View {
                 .font(Theme.Typography.headingLg)
                 .foregroundStyle(Theme.Colors.ink)
             Spacer()
-            Text("dossier.toml")
+            Text(".dossier/config.toml")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.mute)
         }
