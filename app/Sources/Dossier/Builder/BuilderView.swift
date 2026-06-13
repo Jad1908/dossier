@@ -164,7 +164,7 @@ struct BuilderView: View {
                 // Editing a section's title/body: step out and select that card.
                 if let editing = model.editingSectionID {
                     listFocused = true          // resign the field editor
-                    model.selectSection(editing)
+                    model.selectOnly(editing)
                     return .handled
                 }
                 // Any other field (CSV cell, etc.): let it handle its own Esc.

@@ -82,14 +82,20 @@ final class AppModel {
 
     // MARK: - Selection gestures
 
+    /// Select only this card, unconditionally — used by keyboard paths where a
+    /// no-op move or Esc must keep the card selected, not toggle it off.
+    func selectOnly(_ id: UUID) {
+        selectedSectionIDs = [id]
+        selectionAnchor = id
+        selectionActiveEnd = id
+    }
+
     /// Plain click: select only this card. Clicking the sole selection clears it.
     func selectSection(_ id: UUID) {
         if selectedSectionIDs == [id] {
             clearSelection()
         } else {
-            selectedSectionIDs = [id]
-            selectionAnchor = id
-            selectionActiveEnd = id
+            selectOnly(id)
         }
     }
 
@@ -135,7 +141,7 @@ final class AppModel {
         } else {
             next = up ? spec.sections.count - 1 : 0
         }
-        selectSection(spec.sections[next].id)
+        selectOnly(spec.sections[next].id)
     }
 
     /// Shift+↑/↓: grow or shrink the range by one card from its moving end,
