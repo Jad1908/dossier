@@ -140,6 +140,10 @@ struct SectionCardView: View {
                 .foregroundStyle(Theme.Colors.ink)
                 .focused($titleFocused)
                 .onSubmit { titleFocused = false }
+                .onChange(of: titleFocused) { _, focused in
+                    if focused { model.beginEditing(sectionID) }
+                    else { model.endEditing(sectionID) }
+                }
             Image(systemName: "pencil")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(Theme.Colors.mute)
@@ -185,6 +189,7 @@ struct SectionCardView: View {
 private struct TextSectionBody: View {
     @Environment(AppModel.self) private var model
     @Binding var binding: SpecSection
+    @FocusState private var editing: Bool
 
     private var isInline: Bool {
         if case .text(.body) = binding.kind { return true }
@@ -222,6 +227,11 @@ private struct TextSectionBody: View {
                     .frame(minHeight: 96)
                     .padding(Theme.Spacing.xs)
                     .surfaceTile(fill: Theme.Colors.surfaceElevated)
+                    .focused($editing)
+                    .onChange(of: editing) { _, focused in
+                        if focused { model.beginEditing(binding.id) }
+                        else { model.endEditing(binding.id) }
+                    }
             } else {
                 savedPromptPicker
             }

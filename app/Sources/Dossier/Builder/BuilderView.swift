@@ -161,9 +161,15 @@ struct BuilderView: View {
                 return .handled
             }
             .onKeyPress(.escape) {
-                guard !isEditingText, !model.selectedSectionIDs.isEmpty else {
-                    return .ignored
+                // Editing a section's title/body: step out and select that card.
+                if let editing = model.editingSectionID {
+                    listFocused = true          // resign the field editor
+                    model.selectSection(editing)
+                    return .handled
                 }
+                // Any other field (CSV cell, etc.): let it handle its own Esc.
+                if isEditingText { return .ignored }
+                guard !model.selectedSectionIDs.isEmpty else { return .ignored }
                 model.clearSelection()
                 return .handled
             }

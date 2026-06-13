@@ -59,6 +59,13 @@ final class AppModel {
 
     func isSelected(_ id: UUID) -> Bool { selectedSectionIDs.contains(id) }
 
+    /// The section whose title or text body is currently being edited, if any.
+    /// Lets Esc step out of the field and select that section (see BuilderView).
+    private(set) var editingSectionID: UUID?
+
+    func beginEditing(_ id: UUID) { editingSectionID = id }
+    func endEditing(_ id: UUID) { if editingSectionID == id { editingSectionID = nil } }
+
     /// The selected sections' current indices, ascending.
     private var selectedIndices: [Int] {
         spec.sections.enumerated()
