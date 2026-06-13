@@ -11,8 +11,15 @@ import io
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .spec import CsvSection, FileSection, Section, TextSection, TreeSection
-from .tree import build_tree
+from .spec import (
+    CsvSection,
+    FileSection,
+    FolderSection,
+    Section,
+    TextSection,
+    TreeSection,
+)
+from .tree import build_tree, iter_repo_files
 
 if TYPE_CHECKING:
     from .render import RenderContext
@@ -48,6 +55,8 @@ def render_section_content(
         return _read_repo_file(section.path, root)
     if isinstance(section, CsvSection):
         return _render_csv(section, root)
+    if isinstance(section, FolderSection):
+        return _render_folder(section, root)
     if isinstance(section, TreeSection):
         return build_tree(
             root,
@@ -180,3 +189,51 @@ def _render_csv(section: CsvSection, root: Path) -> str:
     if omitted:
         content += f"\n... ({omitted} more row{'s' if omitted != 1 else ''})"
     return content
+
+
+def _decode_text(path: Path) -> str | None:
+    """The file's UTF-8 text, or None when it's binary (a NUL byte or any
+    non-UTF-8 sequence) — the signal a file is a "non-base" format whose
+    presence we note but whose bytes we don't inline."""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    if b"\x00" in data:
+        return None
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+def _render_folder(section: FolderSection, root: Path) -> str:
+    """Join every file under the folder, each under a `## <relative path>`
+    subheader. `*.csv` files use the csv head extractor at its defaults; binary
+    files contribute their subheader alone (an empty body marks their presence).
+
+    The skip rules (ALWAYS_SKIP + optional .gitignore) match the tree section's,
+    so build artifacts and vendored trees don't flood the prompt.
+    """
+    root_resolved = root.resolve()
+    base = (root / section.path).resolve()
+    # Must be an existing directory under the repo root.
+    if not base.exists() or not base.is_dir():
+        raise MissingFileError(section.path)
+    if root_resolved not in base.parents and base != root_resolved:
+        raise MissingFileError(section.path)
+
+    blocks: list[str] = []
+    for file in iter_repo_files(root, base, use_gitignore=section.use_gitignore):
+        rel = file.relative_to(base).as_posix()
+        header = f"## {rel}"
+        if file.suffix.lower() == ".csv":
+            repo_rel = file.relative_to(root_resolved).as_posix()
+            body = _render_csv(
+                CsvSection(type="csv", title=rel, path=repo_rel), root
+            )
+        else:
+            body = _decode_text(file)
+        # A binary file (or an empty one) gets just its subheader.
+        blocks.append(f"{header}\n{body}" if body else header)
+    return "\n\n".join(blocks)

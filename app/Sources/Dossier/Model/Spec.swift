@@ -24,6 +24,10 @@ enum SectionKind: Equatable, Hashable {
     /// A csv head extractor (spec.py CsvSection): header + the first `rows`
     /// data rows (-1 = whole file), narrowed to `columns` when non-empty.
     case csv(path: String, rows: Int, columns: [String])
+    /// A folder join (spec.py FolderSection): every file under `path`, each
+    /// under a subheader with its path relative to the folder. csv files use
+    /// the head extractor's defaults; binary files contribute a subheader only.
+    case folder(path: String, useGitignore: Bool)
 
     /// The default peek for a freshly selected csv file.
     static let defaultCSVRows = 5
@@ -38,10 +42,11 @@ enum SectionKind: Equatable, Hashable {
 
     var typeString: String {
         switch self {
-        case .tree: return "tree"
-        case .file: return "file"
-        case .text: return "text"
-        case .csv:  return "csv"
+        case .tree:   return "tree"
+        case .file:   return "file"
+        case .text:   return "text"
+        case .csv:    return "csv"
+        case .folder: return "folder"
         }
     }
 
@@ -49,10 +54,11 @@ enum SectionKind: Equatable, Hashable {
 
     var symbolName: String {
         switch self {
-        case .tree: return "list.bullet.indent"
-        case .file: return "doc.text"
-        case .text: return "text.alignleft"
-        case .csv:  return "tablecells"
+        case .tree:   return "list.bullet.indent"
+        case .file:   return "doc.text"
+        case .text:   return "text.alignleft"
+        case .csv:    return "tablecells"
+        case .folder: return "folder"
         }
     }
 }

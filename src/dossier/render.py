@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .sections import MissingFileError, MissingPromptError, render_section_content
-from .spec import CsvSection, FileSection, Spec, TextSection
+from .spec import CsvSection, FileSection, FolderSection, Spec, TextSection
 
 
 @dataclass
@@ -39,18 +39,21 @@ class MissingPromptsError(Exception):
 
 
 def check_missing_paths(spec: Spec, root: Path) -> list[str]:
-    """Return every `file`/`csv` section path that does not resolve under root."""
+    """Return every `file`/`csv`/`folder` section path that does not resolve
+    under root. `file`/`csv` paths must be files; `folder` paths must be
+    directories."""
     missing: list[str] = []
     root_resolved = root.resolve()
     for section in spec.section:
-        if isinstance(section, (FileSection, CsvSection)):
+        if isinstance(section, (FileSection, CsvSection, FolderSection)):
             target = (root / section.path).resolve()
-            ok = (
-                target.exists()
-                and target.is_file()
-                and (target == root_resolved or root_resolved in target.parents)
+            under_root = target == root_resolved or root_resolved in target.parents
+            is_right_kind = (
+                target.is_dir()
+                if isinstance(section, FolderSection)
+                else target.is_file()
             )
-            if not ok:
+            if not (target.exists() and is_right_kind and under_root):
                 missing.append(section.path)
     return missing
 

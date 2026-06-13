@@ -19,7 +19,7 @@ from pydantic import (
     model_validator,
 )
 
-ALLOWED_TYPES = ("text", "file", "tree", "csv")
+ALLOWED_TYPES = ("text", "file", "tree", "csv", "folder")
 
 
 class SpecError(Exception):
@@ -78,8 +78,25 @@ class CsvSection(_SectionBase):
         return self
 
 
+class FolderSection(_SectionBase):
+    """Joins every file under a folder into one section.
+
+    Each file is preceded by a subheader carrying its path relative to the
+    folder, so the model knows where it sits in the tree. `*.csv` files render
+    through the csv head extractor at its defaults (first 5 rows, all columns —
+    not configurable here); files that don't decode as UTF-8 text (parquet,
+    pdf, images, …) contribute only their subheader, marking their presence.
+
+    Honors ALWAYS_SKIP and, when `use_gitignore`, .gitignore — the same skips
+    the tree section applies."""
+
+    type: Literal["folder"]
+    path: str
+    use_gitignore: bool = True
+
+
 Section = Annotated[
-    Union[TextSection, FileSection, TreeSection, CsvSection],
+    Union[TextSection, FileSection, TreeSection, CsvSection, FolderSection],
     Field(discriminator="type"),
 ]
 

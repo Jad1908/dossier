@@ -51,6 +51,10 @@ enum SpecIO {
                         path: t["path"]?.string ?? "",
                         rows: t["rows"]?.int ?? SectionKind.defaultCSVRows,
                         columns: (t["columns"]?.array).map(strings) ?? [])))
+                case "folder":
+                    sections.append(SpecSection(title: title, kind: .folder(
+                        path: t["path"]?.string ?? "",
+                        useGitignore: t["use_gitignore"]?.bool ?? true)))
                 case "text":
                     if let prompt = t["prompt"]?.string {
                         sections.append(SpecSection(title: title,
@@ -96,6 +100,9 @@ enum SpecIO {
                     let a = TOMLArray(); columns.forEach { a.append($0) }
                     t["columns"] = a
                 }
+            case let .folder(path, useGitignore):
+                t["path"] = path
+                t["use_gitignore"] = useGitignore
             case let .text(source):
                 switch source {
                 case let .body(body): t["body"] = body

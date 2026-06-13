@@ -150,3 +150,43 @@ def _walk(
                 depth + 1,
                 out,
             )
+
+
+def iter_repo_files(
+    root: Path, base: Path, use_gitignore: bool = True
+) -> list[Path]:
+    """Every file under `base`, sorted by its path relative to `base`.
+
+    Applies the same skip rules as `build_tree`: ALWAYS_SKIP directories are
+    dropped, and (when `use_gitignore`) .gitignore is honored. `.gitignore`
+    patterns are repo-relative, so they're loaded from and matched against
+    `root` even when `base` is a subfolder. Symlinked directories are not
+    descended into.
+    """
+    root = root.resolve()
+    base = base.resolve()
+    spec = _load_gitignore(root) if use_gitignore else None
+    out: list[Path] = []
+    _collect(root, base, spec, out)
+    return sorted(out, key=lambda p: p.relative_to(base).as_posix())
+
+
+def _collect(
+    root: Path,
+    current: Path,
+    spec: pathspec.PathSpec | None,
+    out: list[Path],
+) -> None:
+    try:
+        entries = list(current.iterdir())
+    except OSError:
+        return
+    for entry in entries:
+        # No extra exclude/include here — folder sections honor only the
+        # built-in skips and .gitignore (the tree's config patterns don't apply).
+        if _skipped(root, entry, spec, [], []):
+            continue
+        if entry.is_dir() and not entry.is_symlink():
+            _collect(root, entry, spec, out)
+        elif entry.is_file():
+            out.append(entry)
