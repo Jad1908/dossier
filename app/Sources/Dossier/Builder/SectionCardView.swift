@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 // One spec section, editable inline (DESIGN.md §section-card). Header carries
 // the type badge, an editable title, a reorder handle, and remove. The body
@@ -8,7 +9,14 @@ struct SectionCardView: View {
     let sectionID: UUID
 
     private var binding: Binding<SpecSection> { model.binding(for: sectionID) }
-    private var isSelected: Bool { model.selectedSectionID == sectionID }
+    private var isSelected: Bool { model.isSelected(sectionID) }
+
+    /// An inline text body owns the Enter-to-edit request (it focuses its
+    /// editor); every other kind falls back to focusing the title for a rename.
+    private var isInlineText: Bool {
+        if case .text(.body) = binding.wrappedValue.kind { return true }
+        return false
+    }
     @State private var hovering = false
     @State private var titleHovering = false
     @State private var dropTargeted = false
@@ -55,7 +63,7 @@ struct SectionCardView: View {
             for payload in payloads {
                 if let dragged = SectionDrag.id(from: payload) {
                     if dragged != sectionID {
-                        model.moveSection(id: dragged, to: myIndex)
+                        model.dropReorder(draggedID: dragged, to: myIndex)
                         handled = true
                     }
                 } else {
@@ -66,12 +74,38 @@ struct SectionCardView: View {
             return handled
         } isTargeted: { dropTargeted = $0 }
         .onHover { hovering = $0 }
-        .onTapGesture { model.selectedSectionID = isSelected ? nil : sectionID }
+        // Shift = extend a range, Cmd = toggle one card, plain = select only
+        // this one. Read the live modifier flags so one gesture covers all three.
+        .onTapGesture {
+            let mods = NSEvent.modifierFlags
+            if mods.contains(.shift) {
+                model.extendSelection(to: sectionID)
+            } else if mods.contains(.command) {
+                model.toggleSectionSelection(sectionID)
+            } else {
+                model.selectSection(sectionID)
+            }
+        }
         .animation(Theme.Motion.smooth, value: isSelected)
         .animation(Theme.Motion.snappy, value: hovering)
         .transition(.asymmetric(
             insertion: .scale(scale: 0.94).combined(with: .opacity),
             removal: .scale(scale: 0.92).combined(with: .opacity)))
+    }
+
+    /// The floating drag image: the dragged card's title, or a count when it's
+    /// part of a multi-selection being moved together.
+    @ViewBuilder
+    private func dragPreview(_ section: SpecSection) -> some View {
+        if isSelected, model.selectedSectionIDs.count > 1 {
+            Label("\(model.selectedSectionIDs.count) sections",
+                  systemImage: "square.stack.3d.up")
+                .padding(Theme.Spacing.xs)
+        } else {
+            Label(section.title.isEmpty ? section.kind.label : section.title,
+                  systemImage: section.kind.symbolName)
+                .padding(Theme.Spacing.xs)
+        }
     }
 
     // MARK: - Header
@@ -83,11 +117,11 @@ struct SectionCardView: View {
                 .padding(Theme.Spacing.xs)   // a forgiving grab area
                 .contentShape(Rectangle())
                 .draggable(SectionDrag.payload(for: sectionID)) {
-                    Label(section.title.isEmpty ? section.kind.label : section.title,
-                          systemImage: section.kind.symbolName)
-                        .padding(Theme.Spacing.xs)
+                    dragPreview(section)
                 }
-                .help("Drag to reorder")
+                .help(isSelected && model.selectedSectionIDs.count > 1
+                      ? "Drag to move the \(model.selectedSectionIDs.count) selected sections"
+                      : "Drag to reorder")
             TypeBadge(kind: section.kind)
             titleField
             Spacer()
@@ -113,6 +147,16 @@ struct SectionCardView: View {
                 .foregroundStyle(Theme.Colors.ink)
                 .focused($titleFocused)
                 .onSubmit { titleFocused = false }
+                .onChange(of: titleFocused) { _, focused in
+                    if focused { model.beginEditing(sectionID) }
+                    else { model.endEditing(sectionID) }
+                }
+                .onChange(of: model.editRequestID) { _, id in
+                    // Only claim the request for kinds with no text body.
+                    guard id == sectionID, !isInlineText else { return }
+                    titleFocused = true
+                    model.consumeEditRequest(sectionID)
+                }
             Image(systemName: "pencil")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(Theme.Colors.mute)
@@ -158,6 +202,7 @@ struct SectionCardView: View {
 private struct TextSectionBody: View {
     @Environment(AppModel.self) private var model
     @Binding var binding: SpecSection
+    @FocusState private var editing: Bool
 
     private var isInline: Bool {
         if case .text(.body) = binding.kind { return true }
@@ -195,6 +240,16 @@ private struct TextSectionBody: View {
                     .frame(minHeight: 96)
                     .padding(Theme.Spacing.xs)
                     .surfaceTile(fill: Theme.Colors.surfaceElevated)
+                    .focused($editing)
+                    .onChange(of: editing) { _, focused in
+                        if focused { model.beginEditing(binding.id) }
+                        else { model.endEditing(binding.id) }
+                    }
+                    .onChange(of: model.editRequestID) { _, id in
+                        guard id == binding.id else { return }
+                        editing = true
+                        model.consumeEditRequest(binding.id)
+                    }
             } else {
                 savedPromptPicker
             }
@@ -393,7 +448,7 @@ struct InsertDelimiter: View {
         .dropDestination(for: String.self) { payloads, _ in
             for payload in payloads {
                 if let dragged = SectionDrag.id(from: payload) {
-                    model.moveSection(id: dragged, to: index)
+                    model.dropReorder(draggedID: dragged, to: index)
                 } else {
                     model.addFileSection(relativePath: payload, at: index)
                 }

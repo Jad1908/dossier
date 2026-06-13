@@ -46,7 +46,123 @@ final class AppModel {
 
     // MARK: - Builder selection
 
-    var selectedSectionID: UUID?
+    /// The selected section cards. A set so several can be picked at once
+    /// (Shift = range, Cmd = toggle) and moved or deleted as a group.
+    private(set) var selectedSectionIDs: Set<UUID> = []
+
+    /// The last card clicked without Shift — the fixed end of a Shift-range.
+    private var selectionAnchor: UUID?
+
+    /// The moving end of a Shift-range, so Shift+Arrow grows from where the last
+    /// extension left off rather than from the anchor.
+    private var selectionActiveEnd: UUID?
+
+    func isSelected(_ id: UUID) -> Bool { selectedSectionIDs.contains(id) }
+
+    /// The section whose title or text body is currently being edited, if any.
+    /// Lets Esc step out of the field and select that section (see BuilderView).
+    private(set) var editingSectionID: UUID?
+
+    func beginEditing(_ id: UUID) { editingSectionID = id }
+    func endEditing(_ id: UUID) { if editingSectionID == id { editingSectionID = nil } }
+
+    /// A pending "enter edit mode" request (Enter on a selected card). The
+    /// matching card focuses its editor and then clears it.
+    private(set) var editRequestID: UUID?
+
+    func requestEdit(_ id: UUID) { editRequestID = id }
+    func consumeEditRequest(_ id: UUID) { if editRequestID == id { editRequestID = nil } }
+
+    /// The selected sections' current indices, ascending.
+    private var selectedIndices: [Int] {
+        spec.sections.enumerated()
+            .filter { selectedSectionIDs.contains($0.element.id) }
+            .map(\.offset)
+    }
+
+    // MARK: - Selection gestures
+
+    /// Select only this card, unconditionally — used by keyboard paths where a
+    /// no-op move or Esc must keep the card selected, not toggle it off.
+    func selectOnly(_ id: UUID) {
+        selectedSectionIDs = [id]
+        selectionAnchor = id
+        selectionActiveEnd = id
+    }
+
+    /// Plain click: select only this card. Clicking the sole selection clears it.
+    func selectSection(_ id: UUID) {
+        if selectedSectionIDs == [id] {
+            clearSelection()
+        } else {
+            selectOnly(id)
+        }
+    }
+
+    /// Cmd-click: add or remove this card from the selection.
+    func toggleSectionSelection(_ id: UUID) {
+        if selectedSectionIDs.contains(id) {
+            selectedSectionIDs.remove(id)
+        } else {
+            selectedSectionIDs.insert(id)
+        }
+        selectionAnchor = id
+        selectionActiveEnd = id
+    }
+
+    /// Shift-click: select the contiguous range from the anchor to this card.
+    func extendSelection(to id: UUID) {
+        guard let anchor = selectionAnchor,
+              let a = spec.sections.firstIndex(where: { $0.id == anchor }),
+              let b = spec.sections.firstIndex(where: { $0.id == id }) else {
+            selectSection(id); return
+        }
+        let range = a <= b ? a...b : b...a
+        selectedSectionIDs = Set(spec.sections[range].map(\.id))
+        selectionActiveEnd = id
+        // Anchor stays put so the range can be re-stretched from the same end.
+    }
+
+    func clearSelection() {
+        selectedSectionIDs = []
+        selectionAnchor = nil
+        selectionActiveEnd = nil
+    }
+
+    // MARK: - Keyboard navigation
+
+    /// ↑/↓: move the single selection to the previous/next card. With nothing
+    /// selected, lands on the last/first card so the keyboard can take over.
+    func moveSelectionCursor(up: Bool) {
+        guard !spec.sections.isEmpty else { return }
+        let next: Int
+        if let cur = cursorIndex {
+            next = up ? max(0, cur - 1) : min(spec.sections.count - 1, cur + 1)
+        } else {
+            next = up ? spec.sections.count - 1 : 0
+        }
+        selectOnly(spec.sections[next].id)
+    }
+
+    /// Shift+↑/↓: grow or shrink the range by one card from its moving end,
+    /// pivoting on the anchor.
+    func stepExtendSelection(up: Bool) {
+        guard !spec.sections.isEmpty else { return }
+        guard selectionAnchor != nil, let end = selectionActiveEnd,
+              let endIdx = spec.sections.firstIndex(where: { $0.id == end }) else {
+            moveSelectionCursor(up: up); return
+        }
+        let nextIdx = up ? max(0, endIdx - 1) : min(spec.sections.count - 1, endIdx + 1)
+        extendSelection(to: spec.sections[nextIdx].id)
+    }
+
+    /// The cursor for keyboard moves: the anchor if it's still around, else the
+    /// nearest selected edge.
+    private var cursorIndex: Int? {
+        if let a = selectionAnchor,
+           let i = spec.sections.firstIndex(where: { $0.id == a }) { return i }
+        return selectedIndices.last
+    }
 
     // MARK: - File preview
 
@@ -199,7 +315,7 @@ final class AppModel {
 
     func switchSpec(to ref: SpecRef) {
         currentSpec = ref
-        selectedSectionID = nil
+        clearSelection()
         loadSpecAndConfig()
         render()
     }
@@ -298,10 +414,7 @@ final class AppModel {
     /// at the end when nothing is selected. Each add then selects the new
     /// section, so a run of adds stays in order below the selection.
     private var defaultInsertIndex: Int {
-        if let id = selectedSectionID,
-           let i = spec.sections.firstIndex(where: { $0.id == id }) {
-            return i + 1
-        }
+        if let last = selectedIndices.max() { return last + 1 }
         return spec.sections.count
     }
 
@@ -316,7 +429,8 @@ final class AppModel {
         let clamped = min(max(index ?? defaultInsertIndex, 0), spec.sections.count)
         withAnimation(Theme.Motion.bouncy) {
             spec.sections.insert(section, at: clamped)
-            selectedSectionID = section.id
+            selectedSectionIDs = [section.id]
+            selectionAnchor = section.id
         }
         scheduleSave()
     }
@@ -324,7 +438,8 @@ final class AppModel {
     func addFileSection(relativePath: String, at index: Int? = nil) {
         // Already in the prompt: select that card instead of adding a duplicate.
         if let existing = spec.sections.first(where: { $0.filePath == relativePath }) {
-            selectedSectionID = existing.id
+            selectedSectionIDs = [existing.id]
+            selectionAnchor = existing.id
             return
         }
         let title = (relativePath as NSString).lastPathComponent.uppercased()
@@ -384,7 +499,18 @@ final class AppModel {
     func removeSection(id: UUID) {
         withAnimation(Theme.Motion.smooth) {
             spec.sections.removeAll { $0.id == id }
-            if selectedSectionID == id { selectedSectionID = nil }
+            selectedSectionIDs.remove(id)
+            if selectionAnchor == id { selectionAnchor = nil }
+        }
+        scheduleSave()
+    }
+
+    /// Delete every selected section at once.
+    func deleteSelection() {
+        guard !selectedSectionIDs.isEmpty else { return }
+        withAnimation(Theme.Motion.smooth) {
+            spec.sections.removeAll { selectedSectionIDs.contains($0.id) }
+            clearSelection()
         }
         scheduleSave()
     }
@@ -396,6 +522,16 @@ final class AppModel {
         scheduleSave()
     }
 
+    /// Move a group of sections (by id) to `offset` (pre-removal coordinates,
+    /// like `onMove`'s destination), preserving their relative order. Used by
+    /// the reorder drag when several cards are selected.
+    func moveSections(ids: Set<UUID>, to offset: Int) {
+        let offsets = IndexSet(spec.sections.enumerated()
+            .filter { ids.contains($0.element.id) }.map(\.offset))
+        guard !offsets.isEmpty else { return }
+        moveSections(from: offsets, to: min(max(offset, 0), spec.sections.count))
+    }
+
     /// Move one section to `offset` (pre-removal coordinates, like `onMove`'s
     /// destination) — the reorder drag's drop handler. No-op when the drop
     /// wouldn't change the order, so nothing saves or re-renders.
@@ -404,6 +540,28 @@ final class AppModel {
         let clamped = min(max(offset, 0), spec.sections.count)
         guard clamped != from, clamped != from + 1 else { return }
         moveSections(from: IndexSet(integer: from), to: clamped)
+    }
+
+    /// The reorder drag's drop: if the dragged card is part of a multi-selection,
+    /// the whole selection lands at `offset`; otherwise just the dragged card.
+    func dropReorder(draggedID: UUID, to offset: Int) {
+        if selectedSectionIDs.contains(draggedID), selectedSectionIDs.count > 1 {
+            moveSections(ids: selectedSectionIDs, to: offset)
+        } else {
+            moveSection(id: draggedID, to: offset)
+        }
+    }
+
+    /// Block-move the selection one slot earlier / later, keeping it together.
+    func moveSelectionUp() {
+        guard let top = selectedIndices.min(), top > 0 else { return }
+        moveSections(ids: selectedSectionIDs, to: top - 1)
+    }
+
+    func moveSelectionDown() {
+        guard let bottom = selectedIndices.max(),
+              bottom < spec.sections.count - 1 else { return }
+        moveSections(ids: selectedSectionIDs, to: bottom + 2)
     }
 
     /// A binding to one section that re-renders on edit.

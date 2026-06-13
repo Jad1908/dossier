@@ -1,17 +1,24 @@
 import SwiftUI
+import AppKit
 
 // Middle pane — the prompt builder (DESKTOP_APP_SPEC §6, DESIGN.md §builder-pane).
 // The ordered list of the spec's sections as editable cards in render order.
 struct BuilderView: View {
     @Environment(AppModel.self) private var model
     @Binding var showPromptLibrary: Bool
+    @FocusState private var listFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider().overlay(Theme.Colors.hairline)
+            if model.selectedSectionIDs.count > 1 {
+                selectionBar
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
             content
         }
+        .animation(Theme.Motion.smooth, value: model.selectedSectionIDs)
         .background(Theme.Colors.surface)
         // Pane-wide drop target (anywhere not claimed by a card/delimiter):
         // explorer file paths become `file` sections at the end; a section
@@ -19,7 +26,7 @@ struct BuilderView: View {
         .dropDestination(for: String.self) { payloads, _ in
             for payload in payloads {
                 if let id = SectionDrag.id(from: payload) {
-                    model.moveSection(id: id, to: model.spec.sections.count)
+                    model.dropReorder(draggedID: id, to: model.spec.sections.count)
                 } else {
                     model.addFileSection(relativePath: payload)
                 }
@@ -56,6 +63,45 @@ struct BuilderView: View {
         .padding(Theme.Spacing.md)
     }
 
+    // Shown while one or more cards are selected: move the whole selection as a
+    // block, delete it, or clear it. Reordering by hand stays available via drag.
+    private var selectionBar: some View {
+        let count = model.selectedSectionIDs.count
+        return HStack(spacing: Theme.Spacing.sm) {
+            Text("\(count) selected")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.accentText)
+
+            Spacer(minLength: Theme.Spacing.sm)
+
+            Button { model.moveSelectionUp() } label: {
+                Image(systemName: "chevron.up")
+            }
+            .buttonStyle(IconButtonStyle())
+            .help("Move selection up")
+
+            Button { model.moveSelectionDown() } label: {
+                Image(systemName: "chevron.down")
+            }
+            .buttonStyle(IconButtonStyle())
+            .help("Move selection down")
+
+            Button { model.deleteSelection() } label: {
+                Label("Delete", systemImage: "trash")
+                    .font(Theme.Typography.caption)
+            }
+            .buttonStyle(IconButtonStyle())
+            .help("Delete \(count) sections")
+
+            Button("Done") { model.clearSelection() }
+                .buttonStyle(TertiaryButtonStyle())
+                .fixedSize()
+        }
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.sm)
+        .background(Theme.Colors.accentSoft)
+    }
+
     @ViewBuilder
     private var content: some View {
         if !model.currentSpecExists {
@@ -83,7 +129,73 @@ struct BuilderView: View {
                 .padding(.vertical, Theme.Spacing.xs)
                 .padding(.horizontal, Theme.Spacing.md)
             }
+            // Keyboard navigation. onKeyPress on this focusable list is greedy —
+            // it fires even while a child TextEditor is being edited — so every
+            // handler that would clash with typing first bails when a text field
+            // holds the responder (isEditingText). Ctrl+Arrow is the exception:
+            // it deliberately jumps between sections even mid-edit.
+            .focusable()
+            .focusEffectDisabled()
+            .focused($listFocused)
+            .onChange(of: model.selectedSectionIDs) { _, ids in
+                if !ids.isEmpty, !isEditingText { listFocused = true }
+            }
+            .onKeyPress(keys: [.upArrow, .downArrow]) { press in
+                let up = press.key == .upArrow
+                // Ctrl+Arrow: navigate between sections with priority over the
+                // field, dropping out of any text edit in progress.
+                if press.modifiers.contains(.control) {
+                    listFocused = true            // resign the field editor
+                    model.moveSelectionCursor(up: up)
+                    return .handled
+                }
+                // Everything else must leave a field being edited untouched.
+                guard !isEditingText else { return .ignored }
+                if press.modifiers.contains(.command) {
+                    up ? model.moveSelectionUp() : model.moveSelectionDown()
+                } else if press.modifiers.contains(.shift) {
+                    model.stepExtendSelection(up: up)
+                } else {
+                    model.moveSelectionCursor(up: up)
+                }
+                return .handled
+            }
+            .onKeyPress(.escape) {
+                // Editing a section's title/body: step out and select that card.
+                if let editing = model.editingSectionID {
+                    listFocused = true          // resign the field editor
+                    model.selectOnly(editing)
+                    return .handled
+                }
+                // Any other field (CSV cell, etc.): let it handle its own Esc.
+                if isEditingText { return .ignored }
+                guard !model.selectedSectionIDs.isEmpty else { return .ignored }
+                model.clearSelection()
+                return .handled
+            }
+            .onKeyPress(keys: [.delete, .deleteForward]) { _ in
+                guard !isEditingText, !model.selectedSectionIDs.isEmpty else {
+                    return .ignored
+                }
+                model.deleteSelection()
+                return .handled
+            }
+            // Enter on a single selected card drops into editing its text box
+            // (or its title, for sections without a text body).
+            .onKeyPress(.return) {
+                guard !isEditingText, model.selectedSectionIDs.count == 1,
+                      let id = model.selectedSectionIDs.first else { return .ignored }
+                model.requestEdit(id)
+                return .handled
+            }
         }
+    }
+
+    /// True while a text field/editor holds the window's first responder — i.e.
+    /// the user is typing. Backed by AppKit because the clashing keys are caught
+    /// by this view's greedy onKeyPress before the field would see them.
+    private var isEditingText: Bool {
+        NSApp.keyWindow?.firstResponder is NSText
     }
 
     // MARK: - Empty state
