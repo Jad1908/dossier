@@ -26,7 +26,8 @@ if TYPE_CHECKING:
 
 
 class MissingFileError(Exception):
-    """Raised when a `file` section's path does not resolve under the root."""
+    """Raised when a `file` section's path does not resolve to a file (under the
+    repo root, or anywhere on disk when the section is `external`)."""
 
     def __init__(self, path: str) -> None:
         self.path = path
@@ -52,7 +53,7 @@ def render_section_content(
     if isinstance(section, TextSection):
         return _render_text(section, ctx)
     if isinstance(section, FileSection):
-        return _read_repo_file(section.path, root)
+        return _read_file(section.path, root, external=section.external)
     if isinstance(section, CsvSection):
         return _render_csv(section, root)
     if isinstance(section, FolderSection):
@@ -77,7 +78,15 @@ def _render_text(section: TextSection, ctx: "RenderContext") -> str:
     return ctx.prompts[section.prompt]
 
 
-def _read_repo_file(path: str, root: Path) -> str:
+def _read_file(path: str, root: Path, *, external: bool = False) -> str:
+    """Read a section's file as UTF-8 text. Repo files (the default) must resolve
+    under `root`; an `external` file is an absolute path read from anywhere on
+    disk, with no containment check."""
+    if external:
+        target = Path(path).expanduser().resolve()
+        if not target.is_file():
+            raise MissingFileError(path)
+        return target.read_text(encoding="utf-8", errors="replace")
     target = (root / path).resolve()
     root_resolved = root.resolve()
     # Must exist and resolve under the repo root.
@@ -162,7 +171,7 @@ def _render_csv(section: CsvSection, root: Path) -> str:
     emitting an empty table. When rows are cut, a trailing marker says how
     many were omitted, so the model knows it's looking at a sample.
     """
-    text = _read_repo_file(section.path, root).lstrip("\ufeff")
+    text = _read_file(section.path, root, external=section.external).lstrip("\ufeff")
     delimiter = _sniff_delimiter(text[:8192], truncated=len(text) > 8192)
     reader = csv.reader(io.StringIO(text), delimiter=delimiter)
     raw_header = next(reader, None)

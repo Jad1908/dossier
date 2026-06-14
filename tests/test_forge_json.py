@@ -62,6 +62,25 @@ def test_json_success_shape(tmp_path: Path):
         assert set(s) == {"name", "type", "content"}
 
 
+def test_json_external_file_outside_root(tmp_path: Path):
+    # An external file lives outside the project root; the engine reads it by
+    # absolute path and the containment check is skipped.
+    project = tmp_path / "project"
+    project.mkdir()
+    outside = tmp_path / "elsewhere.md"
+    outside.write_text("notes from outside the repo", encoding="utf-8")
+    _spec(
+        project,
+        f'[[section]]\ntype="file"\ntitle="NOTES"\n'
+        f'path="{outside}"\nexternal=true\n',
+    )
+    data = _forge_json(project)
+
+    assert data["ok"] is True
+    assert data["errors"] == []
+    assert "notes from outside the repo" in data["prompt"]
+
+
 def test_json_missing_file_is_error_not_exit(tmp_path: Path):
     _spec(
         tmp_path,

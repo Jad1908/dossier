@@ -123,6 +123,7 @@ struct SectionCardView: View {
                       ? "Drag to move the \(model.selectedSectionIDs.count) selected sections"
                       : "Drag to reorder")
             TypeBadge(kind: section.kind)
+            if section.kind.isExternal { ExternalBadge() }
             titleField
             Spacer()
             Button {
@@ -395,7 +396,9 @@ private struct FileSectionBody: View {
                 .lineLimit(1).truncationMode(.middle)
             Spacer(minLength: Theme.Spacing.sm)
             Button {
-                if let path = section.filePath { model.previewFile(relativePath: path) }
+                if let path = section.filePath {
+                    model.previewFile(relativePath: path, external: section.kind.isExternal)
+                }
             } label: {
                 Image(systemName: "magnifyingglass").imageScale(.small)
             }
@@ -412,6 +415,9 @@ private struct FileSectionBody: View {
             .popover(isPresented: $showPicker, arrowEdge: .bottom) {
                 FilePickerPopover { rel in
                     model.setFileSection(section.id, relativePath: rel)
+                    showPicker = false
+                } onPickExternal: { abs in
+                    model.setFileSection(section.id, relativePath: abs, external: true)
                     showPicker = false
                 }
                 .environment(model)
@@ -550,6 +556,9 @@ struct InsertDelimiter: View {
         .popover(isPresented: $showFilePicker, arrowEdge: .bottom) {
             FilePickerPopover { rel in
                 model.addFileSection(relativePath: rel, at: index)
+                showFilePicker = false
+            } onPickExternal: { abs in
+                model.addExternalFileSection(absolutePath: abs, at: index)
                 showFilePicker = false
             }
             .environment(model)

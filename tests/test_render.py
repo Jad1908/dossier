@@ -74,3 +74,42 @@ def test_no_partial_output_on_missing(sample_repo: Path):
     )
     with pytest.raises(MissingPathsError):
         render(spec, sample_repo)
+
+
+def test_external_file_inlines_from_outside_repo(sample_repo: Path, tmp_path: Path):
+    external = tmp_path / "notes.md"
+    external.write_text("external note body", encoding="utf-8")
+    spec = Spec(
+        section=[
+            FileSection(
+                type="file", title="NOTES", path=str(external), external=True
+            )
+        ]
+    )
+    out = render(spec, sample_repo)
+    assert "external note body" in out
+    assert check_missing_paths(spec, sample_repo) == []
+
+
+def test_non_external_path_outside_repo_still_fails(sample_repo: Path, tmp_path: Path):
+    # The containment check stands for normal (non-external) file sections.
+    external = tmp_path / "secret.txt"
+    external.write_text("nope", encoding="utf-8")
+    spec = Spec(
+        section=[FileSection(type="file", title="X", path=str(external))]
+    )
+    assert check_missing_paths(spec, sample_repo) == [str(external)]
+    with pytest.raises(MissingPathsError):
+        render(spec, sample_repo)
+
+
+def test_missing_external_file_reported(sample_repo: Path, tmp_path: Path):
+    missing = tmp_path / "gone.md"
+    spec = Spec(
+        section=[
+            FileSection(
+                type="file", title="GONE", path=str(missing), external=True
+            )
+        ]
+    )
+    assert check_missing_paths(spec, sample_repo) == [str(missing)]

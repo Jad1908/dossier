@@ -39,22 +39,28 @@ class MissingPromptsError(Exception):
 
 
 def check_missing_paths(spec: Spec, root: Path) -> list[str]:
-    """Return every `file`/`csv`/`folder` section path that does not resolve
-    under root. `file`/`csv` paths must be files; `folder` paths must be
-    directories."""
+    """Return every `file`/`csv`/`folder` section path that does not resolve to
+    the right thing. `file`/`csv` paths must be files; `folder` paths must be
+    directories. Repo paths must also resolve under `root`; an `external`
+    `file`/`csv` path is absolute and read from anywhere on disk."""
     missing: list[str] = []
     root_resolved = root.resolve()
     for section in spec.section:
-        if isinstance(section, (FileSection, CsvSection, FolderSection)):
-            target = (root / section.path).resolve()
-            under_root = target == root_resolved or root_resolved in target.parents
-            is_right_kind = (
-                target.is_dir()
-                if isinstance(section, FolderSection)
-                else target.is_file()
-            )
-            if not (target.exists() and is_right_kind and under_root):
+        if not isinstance(section, (FileSection, CsvSection, FolderSection)):
+            continue
+        if getattr(section, "external", False):
+            if not Path(section.path).expanduser().resolve().is_file():
                 missing.append(section.path)
+            continue
+        target = (root / section.path).resolve()
+        under_root = target == root_resolved or root_resolved in target.parents
+        is_right_kind = (
+            target.is_dir()
+            if isinstance(section, FolderSection)
+            else target.is_file()
+        )
+        if not (target.exists() and is_right_kind and under_root):
+            missing.append(section.path)
     return missing
 
 

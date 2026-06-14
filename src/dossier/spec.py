@@ -1,8 +1,10 @@
 """Pydantic models + TOML loader for the context.toml spec.
 
-All file paths in the spec are relative to the repo root. Paths are not
-checked for existence here — `file` paths are validated at render time (see
-the hard-fail rule in the roadmap §5).
+File paths in the spec are relative to the repo root, except `file`/`csv`
+sections flagged `external = true`, whose `path` is an absolute path to a file
+anywhere on disk (the app's "join a file outside the project" feature). Paths
+are not checked for existence here — they are validated at render time (see the
+hard-fail rule in the roadmap §5).
 """
 
 from __future__ import annotations
@@ -50,6 +52,10 @@ class TextSection(_SectionBase):
 class FileSection(_SectionBase):
     type: Literal["file"]
     path: str
+    # When True, `path` is an absolute path to a file outside the repo root and
+    # the under-root containment check is skipped. Defaults False — a normal
+    # repo-relative file.
+    external: bool = False
 
 
 class TreeSection(_SectionBase):
@@ -70,6 +76,9 @@ class CsvSection(_SectionBase):
     rows: int = 5
     # Column names to keep (header order); empty = all columns.
     columns: list[str] = Field(default_factory=list)
+    # When True, `path` is an absolute path to a file outside the repo root
+    # (see FileSection.external).
+    external: bool = False
 
     @model_validator(mode="after")
     def _rows_in_range(self) -> "CsvSection":

@@ -11,16 +11,22 @@ struct CsvSectionBody: View {
     @State private var showColumns = false
 
     private var path: String {
-        if case let .csv(p, _, _) = binding.kind { return p }
+        if case let .csv(p, _, _, _) = binding.kind { return p }
         return ""
     }
     private var rows: Int {
-        if case let .csv(_, r, _) = binding.kind { return r }
+        if case let .csv(_, r, _, _) = binding.kind { return r }
         return SectionKind.defaultCSVRows
     }
     private var columns: [String] {
-        if case let .csv(_, _, c) = binding.kind { return c }
+        if case let .csv(_, _, c, _) = binding.kind { return c }
         return []
+    }
+    private var external: Bool { binding.kind.isExternal }
+    /// The file's location: absolute for an external csv, else under the project.
+    private var fileURL: URL? {
+        external ? URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+                 : model.projectURL?.appendingPathComponent(path)
     }
     private var wholeFile: Bool { rows == -1 }
 
@@ -71,9 +77,7 @@ struct CsvSectionBody: View {
             .fixedSize()
             .help("Choose which columns to keep")
             .popover(isPresented: $showColumns, arrowEdge: .bottom) {
-                CsvColumnsPopover(
-                    url: model.projectURL?.appendingPathComponent(path),
-                    section: $binding)
+                CsvColumnsPopover(url: fileURL, section: $binding)
             }
         }
         .animation(Theme.Motion.smooth, value: wholeFile)
@@ -91,7 +95,8 @@ struct CsvSectionBody: View {
     private func set(rows: Int? = nil, columns: [String]? = nil) {
         binding.kind = .csv(path: path,
                             rows: rows ?? self.rows,
-                            columns: columns ?? self.columns)
+                            columns: columns ?? self.columns,
+                            external: external)
     }
 
     // MARK: - Path row (mirrors the file section's)
@@ -107,7 +112,7 @@ struct CsvSectionBody: View {
                 .lineLimit(1).truncationMode(.middle)
             Spacer(minLength: Theme.Spacing.sm)
             Button {
-                model.previewFile(relativePath: path)
+                model.previewFile(relativePath: path, external: external)
             } label: {
                 Image(systemName: "magnifyingglass").imageScale(.small)
             }
@@ -124,6 +129,9 @@ struct CsvSectionBody: View {
             .popover(isPresented: $showPicker, arrowEdge: .bottom) {
                 FilePickerPopover { rel in
                     model.setFileSection(binding.id, relativePath: rel)
+                    showPicker = false
+                } onPickExternal: { abs in
+                    model.setFileSection(binding.id, relativePath: abs, external: true)
                     showPicker = false
                 }
                 .environment(model)
@@ -151,13 +159,13 @@ private struct CsvColumnsPopover: View {
     @State private var header: [String]?   // nil while loading
 
     private var selected: [String] {
-        if case let .csv(_, _, c) = section.kind { return c }
+        if case let .csv(_, _, c, _) = section.kind { return c }
         return []
     }
 
     private func apply(_ columns: [String]) {
-        if case let .csv(path, rows, _) = section.kind {
-            section.kind = .csv(path: path, rows: rows, columns: columns)
+        if case let .csv(path, rows, _, external) = section.kind {
+            section.kind = .csv(path: path, rows: rows, columns: columns, external: external)
         }
     }
 

@@ -116,6 +116,23 @@ struct TypeBadge: View {
     }
 }
 
+/// Marks a `file`/`csv` section whose file lives outside the project (an
+/// absolute path on disk), so it reads differently from the repo-relative norm.
+struct ExternalBadge: View {
+    var body: some View {
+        HStack(spacing: Theme.Spacing.xxs) {
+            Image(systemName: "externaldrive").imageScale(.small)
+            Text("external")
+        }
+        .font(Theme.Typography.caption)
+        .foregroundStyle(Theme.Colors.warning)
+        .padding(.horizontal, 6).padding(.vertical, 2)
+        .background(Theme.Colors.warningSoft,
+                    in: RoundedRectangle(cornerRadius: Theme.Radius.xs, style: .continuous))
+        .help("This file lives outside the project — joined by its absolute path")
+    }
+}
+
 enum StatusTone { case error, success, warning
     var solid: Color {
         switch self {
