@@ -165,10 +165,10 @@ private struct OutlineRow: View {
 // MARK: - Folder outline
 
 /// A folder section's body: one collapsible chip per joined file. The engine
-/// concatenates files as `## <path>\n<body>` blocks (blank-line separated), so
-/// a subheader is a `## ` line at the start or just after a blank line — the
-/// exact shape sections.py emits. Copy/Save use the engine's raw content; this
-/// re-parse only drives the outline's per-file folds.
+/// wraps each file in a `<file path="…">…</file>` envelope (self-closing for
+/// presence-only files) — the exact, unambiguous shape sections.py emits, so
+/// this re-parse is precise. Copy/Save use the engine's raw content; this parse
+/// only drives the outline's per-file folds.
 private struct FolderSummary: View {
     let content: String
 
@@ -202,30 +202,41 @@ private struct FolderFile: Identifiable {
 
     var inlined: Bool { !body.isEmpty }
 
+    private static let openPrefix = "<file path=\""
+    private static let openSuffix = "\">"
+    private static let selfCloseSuffix = "\" />"
+    private static let closeTag = "</file>"
+
+    /// Pull the path out of a `<file path="…">` open tag or a `<file path="…" />`
+    /// self-closing tag. Returns nil for any other line.
+    private static func filePath(_ line: String, selfClosing: Bool) -> String? {
+        let suffix = selfClosing ? selfCloseSuffix : openSuffix
+        guard line.hasPrefix(openPrefix), line.hasSuffix(suffix),
+              line.count >= openPrefix.count + suffix.count else { return nil }
+        return String(line.dropFirst(openPrefix.count).dropLast(suffix.count))
+    }
+
     static func parse(_ content: String) -> [FolderFile] {
         var files: [FolderFile] = []
-        var path: String?
-        var bodyLines: [String] = []
-        var afterBlank = true       // start-of-content counts as "after a blank"
-
-        func flush() {
-            guard let path else { return }
-            var lines = bodyLines
-            while lines.last?.isEmpty == true { lines.removeLast() }
-            files.append(FolderFile(path: path, body: lines.joined(separator: "\n")))
-        }
-
-        for line in content.components(separatedBy: "\n") {
-            if afterBlank, line.hasPrefix("## ") {
-                flush()
-                path = String(line.dropFirst(3))
-                bodyLines = []
-            } else if path != nil {
-                bodyLines.append(line)
+        let lines = content.components(separatedBy: "\n")
+        var i = 0
+        while i < lines.count {
+            let line = lines[i]
+            if let path = filePath(line, selfClosing: true) {
+                files.append(FolderFile(path: path, body: ""))
+                i += 1
+            } else if let path = filePath(line, selfClosing: false) {
+                var body: [String] = []
+                i += 1
+                while i < lines.count, lines[i] != closeTag {
+                    body.append(lines[i]); i += 1
+                }
+                if i < lines.count { i += 1 }   // consume the closing </file>
+                files.append(FolderFile(path: path, body: body.joined(separator: "\n")))
+            } else {
+                i += 1   // blank line between blocks
             }
-            afterBlank = line.isEmpty
         }
-        flush()
         return files
     }
 }

@@ -44,29 +44,30 @@ def test_joins_every_file_with_subheaders(repo: Path):
     out = render(_folder_spec(), repo)
     assert 'name="PKG" type="folder"' in out
     content = _content(out)
-    # Every file gets a subheader with its path relative to the folder.
-    assert "## a.py" in content
-    assert "## sub/b.py" in content
-    assert "## data.csv" in content
-    assert "## blob.parquet" in content
+    # Every file is wrapped in a <file> envelope naming its path in the folder.
+    assert '<file path="a.py">' in content
+    assert '<file path="sub/b.py">' in content
+    assert '<file path="data.csv">' in content
+    assert '<file path="blob.parquet" />' in content
 
 
 def test_text_files_are_inlined(repo: Path):
     content = _content(render(_folder_spec(), repo))
-    assert "## a.py\nprint('a')" in content
-    assert "## sub/b.py\nprint('b')" in content
+    assert '<file path="a.py">\nprint(\'a\')\n</file>' in content
+    assert '<file path="sub/b.py">\nprint(\'b\')\n</file>' in content
 
 
 def test_subheaders_are_in_sorted_relative_order(repo: Path):
     content = _content(render(_folder_spec(), repo))
     order = [content.index(h) for h in
-             ("## a.py", "## blob.parquet", "## data.csv", "## sub/b.py")]
+             ('<file path="a.py"', '<file path="blob.parquet"',
+              '<file path="data.csv"', '<file path="sub/b.py"')]
     assert order == sorted(order)
 
 
 def test_csv_uses_head_extractor_defaults(repo: Path):
     content = _content(render(_folder_spec(), repo))
-    block = content.split("## data.csv\n", 1)[1].split("\n\n", 1)[0]
+    block = content.split('<file path="data.csv">\n', 1)[1].split("\n</file>", 1)[0]
     lines = block.splitlines()
     # Header + separator + the default 5 data rows + omission marker.
     assert [c.strip() for c in lines[0].strip("|").split("|")] == ["name", "age"]
@@ -76,23 +77,22 @@ def test_csv_uses_head_extractor_defaults(repo: Path):
 
 def test_binary_file_is_presence_only(repo: Path):
     content = _content(render(_folder_spec(), repo))
-    # Its subheader is present, immediately followed by the next block's blank
-    # line — no inlined bytes.
-    block = content.split("## blob.parquet", 1)[1]
-    assert block.startswith("\n\n") or block == ""
+    # A self-closing tag, with no body and no closing </file> for it.
+    assert '<file path="blob.parquet" />' in content
+    assert '<file path="blob.parquet">' not in content
 
 
 def test_gitignore_is_honored(repo: Path):
     (repo / ".gitignore").write_text("*.csv\n", encoding="utf-8")
     content = _content(render(_folder_spec(), repo))
-    assert "## data.csv" not in content
-    assert "## a.py" in content
+    assert '<file path="data.csv"' not in content
+    assert '<file path="a.py"' in content
 
 
 def test_gitignore_can_be_disabled(repo: Path):
     (repo / ".gitignore").write_text("*.csv\n", encoding="utf-8")
     content = _content(render(_folder_spec(use_gitignore=False), repo))
-    assert "## data.csv" in content
+    assert '<file path="data.csv">' in content
 
 
 def test_always_skip_dirs_are_dropped(repo: Path):
@@ -156,7 +156,7 @@ def test_forge_renders_folder_ok(repo: Path):
     result = build_result(spec_path, repo / ".dossier" / "config.toml", repo)
     assert result.ok is True
     assert result.sections[0].type == "folder"
-    assert "## a.py" in result.sections[0].content
+    assert '<file path="a.py">' in result.sections[0].content
 
 
 def test_spec_loads_folder_section(tmp_path: Path):

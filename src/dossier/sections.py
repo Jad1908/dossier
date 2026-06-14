@@ -208,12 +208,15 @@ def _decode_text(path: Path) -> str | None:
 
 
 def _render_folder(section: FolderSection, root: Path) -> str:
-    """Join every file under the folder, each under a `## <relative path>`
-    subheader. `*.csv` files use the csv head extractor at its defaults; binary
-    files contribute their subheader alone (an empty body marks their presence).
+    """Join every file under the folder, each wrapped in a `<file path="…">`
+    envelope giving its path relative to the folder. `*.csv` files use the csv
+    head extractor at its defaults; binary (or empty) files emit a self-closing
+    `<file path="…" />` tag — their presence noted, their bytes not inlined.
 
-    The skip rules (ALWAYS_SKIP + optional .gitignore) match the tree section's,
-    so build artifacts and vendored trees don't flood the prompt.
+    The envelope is the unambiguous counterpart of the section envelope, so the
+    app can re-parse the joined files exactly. The skip rules (ALWAYS_SKIP +
+    optional .gitignore) match the tree section's, keeping build artifacts and
+    vendored trees out.
     """
     root_resolved = root.resolve()
     base = (root / section.path).resolve()
@@ -226,7 +229,6 @@ def _render_folder(section: FolderSection, root: Path) -> str:
     blocks: list[str] = []
     for file in iter_repo_files(root, base, use_gitignore=section.use_gitignore):
         rel = file.relative_to(base).as_posix()
-        header = f"## {rel}"
         if file.suffix.lower() == ".csv":
             repo_rel = file.relative_to(root_resolved).as_posix()
             body = _render_csv(
@@ -234,6 +236,11 @@ def _render_folder(section: FolderSection, root: Path) -> str:
             )
         else:
             body = _decode_text(file)
-        # A binary file (or an empty one) gets just its subheader.
-        blocks.append(f"{header}\n{body}" if body else header)
+        # Strip a file's trailing newlines so `</file>` sits flush after its
+        # content (the envelope adds its own); empty/binary files self-close.
+        body = body.rstrip("\n") if body else body
+        if body:
+            blocks.append(f'<file path="{rel}">\n{body}\n</file>')
+        else:
+            blocks.append(f'<file path="{rel}" />')
     return "\n\n".join(blocks)
