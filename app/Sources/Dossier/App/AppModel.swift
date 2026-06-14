@@ -171,12 +171,18 @@ final class AppModel {
     /// panel: a second preview repoints it rather than stacking windows.
     private(set) var filePreview: FilePreviewRequest?
 
-    func previewFile(relativePath: String) {
-        guard let projectURL else { return }
+    func previewFile(relativePath: String, external: Bool = false) {
+        let url: URL
+        if external {
+            url = URL(fileURLWithPath: (relativePath as NSString).expandingTildeInPath)
+        } else {
+            guard let projectURL else { return }
+            url = projectURL.appendingPathComponent(relativePath)
+        }
         withAnimation(Theme.Motion.smooth) {
             filePreview = FilePreviewRequest(
                 relativePath: relativePath,
-                url: projectURL.appendingPathComponent(relativePath),
+                url: url,
                 anchor: Self.currentClickAnchor())
         }
     }
@@ -448,6 +454,21 @@ final class AppModel {
                at: index)
     }
 
+    /// Add a `file`/`csv` section for a file picked from anywhere on disk
+    /// (outside the project). `absolutePath` is stored verbatim; the section is
+    /// flagged `external` so the engine skips its under-root containment check.
+    func addExternalFileSection(absolutePath: String, at index: Int? = nil) {
+        if let existing = spec.sections.first(where: { $0.filePath == absolutePath }) {
+            selectedSectionIDs = [existing.id]
+            selectionAnchor = existing.id
+            return
+        }
+        let title = (absolutePath as NSString).lastPathComponent.uppercased()
+        insert(SpecSection(title: title,
+                           kind: .forNewFile(relativePath: absolutePath, external: true)),
+               at: index)
+    }
+
     func removeFileSection(relativePath: String) {
         withAnimation(Theme.Motion.smooth) {
             spec.sections.removeAll { $0.filePath == relativePath }
@@ -463,9 +484,10 @@ final class AppModel {
         }
     }
 
-    /// Change which file a `file` section points at. Keeps a custom title, but
-    /// refreshes a still-default (auto-derived) one to the new file's name.
-    func setFileSection(_ id: UUID, relativePath: String) {
+    /// Change which file a `file`/`csv` section points at. Keeps a custom title,
+    /// but refreshes a still-default (auto-derived) one to the new file's name.
+    /// `external` marks a repoint to a file outside the project (`path` absolute).
+    func setFileSection(_ id: UUID, relativePath: String, external: Bool = false) {
         guard let i = spec.sections.firstIndex(where: { $0.id == id }) else { return }
         var section = spec.sections[i]
         let oldDefault = (section.filePath as NSString?)?.lastPathComponent.uppercased()
@@ -474,9 +496,9 @@ final class AppModel {
         }
         // Repointing follows the new file's kind. csv → csv keeps the row
         // scope but drops the column picks — they named the old file's header.
-        switch (section.kind, SectionKind.forNewFile(relativePath: relativePath)) {
-        case let (.csv(_, rows, _), .csv):
-            section.kind = .csv(path: relativePath, rows: rows, columns: [])
+        switch (section.kind, SectionKind.forNewFile(relativePath: relativePath, external: external)) {
+        case let (.csv(_, rows, _, _), .csv):
+            section.kind = .csv(path: relativePath, rows: rows, columns: [], external: external)
         case let (_, newKind):
             section.kind = newKind
         }

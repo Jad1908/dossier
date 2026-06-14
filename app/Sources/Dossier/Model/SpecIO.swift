@@ -45,12 +45,14 @@ enum SpecIO {
                         useGitignore: t["use_gitignore"]?.bool ?? true)))
                 case "file":
                     sections.append(SpecSection(title: title,
-                        kind: .file(path: t["path"]?.string ?? "")))
+                        kind: .file(path: t["path"]?.string ?? "",
+                                    external: t["external"]?.bool ?? false)))
                 case "csv":
                     sections.append(SpecSection(title: title, kind: .csv(
                         path: t["path"]?.string ?? "",
                         rows: t["rows"]?.int ?? SectionKind.defaultCSVRows,
-                        columns: (t["columns"]?.array).map(strings) ?? [])))
+                        columns: (t["columns"]?.array).map(strings) ?? [],
+                        external: t["external"]?.bool ?? false)))
                 case "folder":
                     sections.append(SpecSection(title: title, kind: .folder(
                         path: t["path"]?.string ?? "",
@@ -91,15 +93,17 @@ enum SpecIO {
             case let .tree(maxDepth, useGitignore):
                 t["max_depth"] = maxDepth
                 t["use_gitignore"] = useGitignore
-            case let .file(path):
+            case let .file(path, external):
                 t["path"] = path
-            case let .csv(path, rows, columns):
+                if external { t["external"] = true }
+            case let .csv(path, rows, columns, external):
                 t["path"] = path
                 t["rows"] = rows
                 if !columns.isEmpty {
                     let a = TOMLArray(); columns.forEach { a.append($0) }
                     t["columns"] = a
                 }
+                if external { t["external"] = true }
             case let .folder(path, useGitignore):
                 t["path"] = path
                 t["use_gitignore"] = useGitignore

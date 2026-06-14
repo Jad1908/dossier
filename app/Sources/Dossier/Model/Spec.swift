@@ -19,11 +19,14 @@ enum TextSource: Equatable, Hashable {
 /// live in .dossier/config.toml's [tree], not here — the engine forbids extra fields).
 enum SectionKind: Equatable, Hashable {
     case tree(maxDepth: Int, useGitignore: Bool)
-    case file(path: String)
+    /// A file inlined whole. `external` files (spec.py FileSection.external) live
+    /// outside the project: `path` is then absolute, not repo-relative.
+    case file(path: String, external: Bool)
     case text(source: TextSource)
     /// A csv head extractor (spec.py CsvSection): header + the first `rows`
     /// data rows (-1 = whole file), narrowed to `columns` when non-empty.
-    case csv(path: String, rows: Int, columns: [String])
+    /// `external` carries the same meaning as on `file`.
+    case csv(path: String, rows: Int, columns: [String], external: Bool)
     /// A folder join (spec.py FolderSection): every file under `path`, each
     /// under a subheader with its path relative to the folder. csv files use
     /// the head extractor's defaults; binary files contribute a subheader only.
@@ -33,11 +36,22 @@ enum SectionKind: Equatable, Hashable {
     static let defaultCSVRows = 5
 
     /// The kind a newly selected file maps to: .csv files get the head
-    /// extractor (first rows only); everything else inlines whole.
-    static func forNewFile(relativePath: String) -> SectionKind {
+    /// extractor (first rows only); everything else inlines whole. `external`
+    /// marks a file picked from outside the project (its `path` is absolute).
+    static func forNewFile(relativePath: String, external: Bool = false) -> SectionKind {
         relativePath.lowercased().hasSuffix(".csv")
-            ? .csv(path: relativePath, rows: defaultCSVRows, columns: [])
-            : .file(path: relativePath)
+            ? .csv(path: relativePath, rows: defaultCSVRows, columns: [], external: external)
+            : .file(path: relativePath, external: external)
+    }
+
+    /// Whether this section points at a file outside the project (`file`/`csv`
+    /// only). Drives the "external" badge and absolute-path handling.
+    var isExternal: Bool {
+        switch self {
+        case let .file(_, external):       return external
+        case let .csv(_, _, _, external):  return external
+        default:                           return false
+        }
     }
 
     var typeString: String {
@@ -75,12 +89,13 @@ struct SpecSection: Identifiable, Equatable, Hashable {
         self.kind = kind
     }
 
-    /// The repo-relative path, for `file` and `csv` sections — the kinds the
-    /// explorer's included state and dedupe key off.
+    /// The path, for `file` and `csv` sections — the kinds the explorer's
+    /// included state and dedupe key off. Repo-relative, or absolute when the
+    /// section is `external`.
     var filePath: String? {
         switch kind {
-        case let .file(path): return path
-        case let .csv(path, _, _): return path
+        case let .file(path, _): return path
+        case let .csv(path, _, _, _): return path
         default: return nil
         }
     }

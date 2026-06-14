@@ -1,11 +1,14 @@
 import SwiftUI
 
-// An in-app file picker shown in a popover (no system open panel): a search
-// field over a scrollable list of the project's files. Used to set or re-target
-// a `file` section. Returns the repo-relative path of the chosen file.
+// An in-app file picker shown in a popover: a search field over a scrollable
+// list of the project's files, with an escape hatch to the system open panel
+// for files outside the project. Used to set or re-target a `file` section.
+// `onPick` receives a repo-relative path; `onPickExternal` (when provided)
+// receives the absolute path of a file chosen from anywhere on disk.
 struct FilePickerPopover: View {
     @Environment(AppModel.self) private var model
     let onPick: (String) -> Void
+    var onPickExternal: ((String) -> Void)? = nil
 
     @State private var search = ""
 
@@ -42,9 +45,43 @@ struct FilePickerPopover: View {
                 }
                 .padding(Theme.Spacing.xs)
             }
+
+            if let onPickExternal {
+                Divider().overlay(Theme.Colors.hairline)
+                Button(action: { chooseFromDisk(onPickExternal) }) {
+                    HStack(spacing: Theme.Spacing.sm) {
+                        Image(systemName: "folder.badge.plus").imageScale(.small)
+                        Text("Choose from disk…")
+                            .font(Theme.Typography.bodyMd)
+                        Spacer()
+                    }
+                    .foregroundStyle(Theme.Colors.accentText)
+                    .padding(.vertical, Theme.Spacing.sm)
+                    .padding(.horizontal, Theme.Spacing.md)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Join a file from anywhere on disk, outside this project")
+            }
         }
         .frame(width: 340, height: 380)
         .background(Theme.Colors.surface)
+    }
+
+    /// Open the system panel and hand back the absolute path of the chosen file.
+    /// External files live outside the project, so the engine reads them by
+    /// absolute path (the section is flagged `external`).
+    private func chooseFromDisk(_ onPick: @escaping (String) -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Join"
+        panel.message = "Choose a file to join from outside the project"
+        if panel.runModal() == .OK, let url = panel.url {
+            onPick(url.path)
+        }
     }
 
     private var files: [FileNode] {
