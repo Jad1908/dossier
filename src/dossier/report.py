@@ -26,7 +26,14 @@ from .render import (
     check_missing_paths,
     render_sections,
 )
-from .spec import CsvSection, FileSection, SpecError, TextSection, load_spec
+from .spec import (
+    CsvSection,
+    FileSection,
+    FolderSection,
+    SpecError,
+    TextSection,
+    load_spec,
+)
 from .tokens import ENCODING_NAME, count_tokens
 
 # Stable enum the app can switch on.
@@ -97,7 +104,7 @@ def build_result(
     errors: list[ForgeError] = []
     for section in spec.section:
         if (
-            isinstance(section, (FileSection, CsvSection))
+            isinstance(section, (FileSection, CsvSection, FolderSection))
             and section.path in missing_paths
         ):
             errors.append(

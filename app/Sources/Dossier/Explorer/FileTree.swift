@@ -133,4 +133,34 @@ extension FileNode {
             $0.relativePath.localizedCaseInsensitiveCompare($1.relativePath) == .orderedAscending
         }
     }
+
+    /// Flat list of directories (not files) whose name matches `query`, walked
+    /// from this node. Noise dirs are pruned and never returned. Used by the
+    /// folder-section picker to choose which folder to join.
+    static func searchFolders(root: URL, query: String, limit: Int = 500) -> [FileNode] {
+        let needle = query.lowercased()
+        var results: [FileNode] = []
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: []) else { return [] }
+
+        for case let url as URL in enumerator {
+            if results.count >= limit { break }
+            let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?
+                .isDirectory ?? false
+            guard isDir else { continue }
+            if noiseDirs.contains(url.lastPathComponent) {
+                enumerator.skipDescendants()
+                continue
+            }
+            if needle.isEmpty || url.lastPathComponent.lowercased().contains(needle) {
+                results.append(FileNode(url: url, isDirectory: true, projectRoot: root))
+            }
+        }
+        return results.sorted {
+            $0.relativePath.localizedCaseInsensitiveCompare($1.relativePath) == .orderedAscending
+        }
+    }
 }

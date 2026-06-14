@@ -7,6 +7,7 @@ struct BuilderView: View {
     @Environment(AppModel.self) private var model
     @Binding var showPromptLibrary: Bool
     @FocusState private var listFocused: Bool
+    @State private var showFolderPicker = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,6 +52,19 @@ struct BuilderView: View {
             } label: { Label("Add Tree", systemImage: "list.bullet.indent") }
                 .buttonStyle(TertiaryButtonStyle())
                 .fixedSize()
+
+            Button {
+                showFolderPicker = true
+            } label: { Label("Add Folder", systemImage: "folder") }
+                .buttonStyle(TertiaryButtonStyle())
+                .fixedSize()
+                .popover(isPresented: $showFolderPicker, arrowEdge: .bottom) {
+                    FolderPickerPopover { rel in
+                        model.addFolderSection(relativePath: rel)
+                        showFolderPicker = false
+                    }
+                    .environment(model)
+                }
 
             Spacer(minLength: Theme.Spacing.sm)
 

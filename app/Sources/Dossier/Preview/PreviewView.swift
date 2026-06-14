@@ -117,10 +117,11 @@ private struct OutlineRow: View {
     @State private var collapsed = false       // text/tree fold (VSCode-style)
 
     private var isFile: Bool { section.type == "file" }
+    private var isFolder: Bool { section.type == "folder" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            // Envelope line; text/tree rows get a small fold chevron.
+            // Envelope line; text/tree/folder rows get a small fold chevron.
             HStack(spacing: Theme.Spacing.xs) {
                 if !isFile {
                     Button {
@@ -142,16 +143,151 @@ private struct OutlineRow: View {
 
             if isFile {
                 FileSummaryChip(section: section, path: filePath, expanded: $expanded)
-                Text("</section>")
-                    .font(Theme.Typography.mono)
-                    .foregroundStyle(Theme.Colors.mute)
+                closingTag
             } else if !collapsed {
-                ClampedText(section.content, limit: PreviewLimit.section)
-                Text("</section>")
-                    .font(Theme.Typography.mono)
-                    .foregroundStyle(Theme.Colors.mute)
+                if isFolder {
+                    FolderSummary(content: section.content)
+                } else {
+                    ClampedText(section.content, limit: PreviewLimit.section)
+                }
+                closingTag
             }
         }
+    }
+
+    private var closingTag: some View {
+        Text("</section>")
+            .font(Theme.Typography.mono)
+            .foregroundStyle(Theme.Colors.mute)
+    }
+}
+
+// MARK: - Folder outline
+
+/// A folder section's body: one collapsible chip per joined file. The engine
+/// wraps each file in a `<file path="…">…</file>` envelope (self-closing for
+/// presence-only files) — the exact, unambiguous shape sections.py emits, so
+/// this re-parse is precise. Copy/Save use the engine's raw content; this parse
+/// only drives the outline's per-file folds.
+private struct FolderSummary: View {
+    let content: String
+
+    private var files: [FolderFile] { FolderFile.parse(content) }
+
+    var body: some View {
+        if files.isEmpty {
+            Text("(empty folder)")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.mute)
+        } else {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text("\(files.count) file\(files.count == 1 ? "" : "s")")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.mute)
+                ForEach(files) { file in
+                    FolderFileChip(file: file)
+                }
+            }
+        }
+    }
+}
+
+/// One parsed file within a folder section: its path subheader and body (empty
+/// for the "presence only" files — binaries and empty files the engine notes
+/// by name without inlining).
+private struct FolderFile: Identifiable {
+    let id = UUID()
+    let path: String
+    let body: String
+
+    var inlined: Bool { !body.isEmpty }
+
+    private static let openPrefix = "<file path=\""
+    private static let openSuffix = "\">"
+    private static let selfCloseSuffix = "\" />"
+    private static let closeTag = "</file>"
+
+    /// Pull the path out of a `<file path="…">` open tag or a `<file path="…" />`
+    /// self-closing tag. Returns nil for any other line.
+    private static func filePath(_ line: String, selfClosing: Bool) -> String? {
+        let suffix = selfClosing ? selfCloseSuffix : openSuffix
+        guard line.hasPrefix(openPrefix), line.hasSuffix(suffix),
+              line.count >= openPrefix.count + suffix.count else { return nil }
+        return String(line.dropFirst(openPrefix.count).dropLast(suffix.count))
+    }
+
+    static func parse(_ content: String) -> [FolderFile] {
+        var files: [FolderFile] = []
+        let lines = content.components(separatedBy: "\n")
+        var i = 0
+        while i < lines.count {
+            let line = lines[i]
+            if let path = filePath(line, selfClosing: true) {
+                files.append(FolderFile(path: path, body: ""))
+                i += 1
+            } else if let path = filePath(line, selfClosing: false) {
+                var body: [String] = []
+                i += 1
+                while i < lines.count, lines[i] != closeTag {
+                    body.append(lines[i]); i += 1
+                }
+                if i < lines.count { i += 1 }   // consume the closing </file>
+                files.append(FolderFile(path: path, body: body.joined(separator: "\n")))
+            } else {
+                i += 1   // blank line between blocks
+            }
+        }
+        return files
+    }
+}
+
+/// A single file's row in the folder outline: a collapsible summary chip that
+/// mirrors FileSummaryChip. Inlined files expand to their content; presence-only
+/// files (binaries) show a muted "not inlined" note and don't expand.
+private struct FolderFileChip: View {
+    let file: FolderFile
+    @State private var expanded = false
+
+    private var lineCount: Int {
+        file.body.split(separator: "\n", omittingEmptySubsequences: false).count
+    }
+    private var byteCount: Int { file.body.utf8.count }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Button {
+                guard file.inlined else { return }
+                withAnimation(.easeInOut(duration: 0.12)) { expanded.toggle() }
+            } label: {
+                HStack(spacing: Theme.Spacing.xs) {
+                    Image(systemName: file.inlined
+                          ? (expanded ? "chevron.down" : "chevron.right")
+                          : "minus")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text(summary)
+                }
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.mute)
+                .padding(.horizontal, Theme.Spacing.sm)
+                .padding(.vertical, Theme.Spacing.xs)
+            }
+            .buttonStyle(.plain)
+            .surfaceTile(fill: Theme.Colors.surfaceElevated, radius: Theme.Radius.sm)
+            .disabled(!file.inlined)
+
+            if expanded, file.inlined {
+                ClampedText(file.body, limit: PreviewLimit.section)
+                    .padding(Theme.Spacing.sm)
+                    .surfaceTile(fill: Theme.Colors.surface, radius: Theme.Radius.sm)
+            }
+        }
+    }
+
+    private var summary: String {
+        guard file.inlined else { return "\(file.path) · not inlined" }
+        let size = ByteCountFormatter.string(fromByteCount: Int64(byteCount),
+                                              countStyle: .file)
+        return "\(file.path) · \(lineCount) lines · ~\(size)"
     }
 }
 

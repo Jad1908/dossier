@@ -193,7 +193,79 @@ struct SectionCardView: View {
         case .file:    FileSectionBody(section: section)
         case .tree:    TreeSectionBody(binding: binding)
         case .csv:     CsvSectionBody(binding: binding)
+        case .folder:  FolderSectionBody(binding: binding)
         }
+    }
+}
+
+// MARK: - Folder section body
+
+/// The folder section (spec.py FolderSection): joins every file under a folder,
+/// each under a subheader with its path. The path row mirrors the file/csv
+/// sections; a gitignore toggle matches the tree section's.
+private struct FolderSectionBody: View {
+    @Environment(AppModel.self) private var model
+    @Binding var binding: SpecSection
+    @State private var showPicker = false
+
+    private var path: String {
+        if case let .folder(p, _) = binding.kind { return p }
+        return ""
+    }
+    private var useGitignore: Bool {
+        if case let .folder(_, g) = binding.kind { return g }
+        return true
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(spacing: Theme.Spacing.xs) {
+                Image(systemName: "folder").imageScale(.small)
+                    .foregroundStyle(Theme.Colors.mute)
+                Text(path.isEmpty ? "(project root)" : path)
+                    .font(Theme.Typography.mono)
+                    .foregroundStyle(Theme.Colors.mute)
+                    .textSelection(.enabled)
+                    .lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: Theme.Spacing.sm)
+                Button {
+                    showPicker = true
+                } label: {
+                    Label("Change…", systemImage: "arrow.triangle.2.circlepath")
+                        .font(Theme.Typography.caption)
+                }
+                .buttonStyle(IconButtonStyle())
+                .help("Choose a different folder for this section")
+                .popover(isPresented: $showPicker, arrowEdge: .bottom) {
+                    FolderPickerPopover { rel in
+                        model.setFolderSection(binding.id, relativePath: rel)
+                        showPicker = false
+                    }
+                    .environment(model)
+                }
+            }
+
+            Toggle(isOn: gitignoreBinding) {
+                Text("Respect .gitignore")
+                    .font(Theme.Typography.bodyMd)
+                    .foregroundStyle(Theme.Colors.body)
+            }
+            .toggleStyle(.switch)
+            .tint(Theme.Colors.accentPrimary)
+
+            Text("Joins every file under the folder. CSV files use the default "
+                 + "head extractor; non-text files (pdf, parquet, …) are noted "
+                 + "by name only.")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.mute)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var gitignoreBinding: Binding<Bool> {
+        Binding(
+            get: { useGitignore },
+            set: { binding.kind = .folder(path: path, useGitignore: $0) })
     }
 }
 
@@ -416,6 +488,7 @@ struct InsertDelimiter: View {
     @State private var dropTargeted = false
     @State private var showChoices = false
     @State private var showFilePicker = false
+    @State private var showFolderPicker = false
 
     private var index: Int { model.insertionIndex(after: afterID) }
 
@@ -467,6 +540,9 @@ struct InsertDelimiter: View {
                     // popovers don't fight.
                     DispatchQueue.main.async { showFilePicker = true }
                 }
+                choice("Folder…", "folder") {
+                    DispatchQueue.main.async { showFolderPicker = true }
+                }
             }
             .padding(Theme.Spacing.xs)
             .frame(width: 160)
@@ -475,6 +551,13 @@ struct InsertDelimiter: View {
             FilePickerPopover { rel in
                 model.addFileSection(relativePath: rel, at: index)
                 showFilePicker = false
+            }
+            .environment(model)
+        }
+        .popover(isPresented: $showFolderPicker, arrowEdge: .bottom) {
+            FolderPickerPopover { rel in
+                model.addFolderSection(relativePath: rel, at: index)
+                showFolderPicker = false
             }
             .environment(model)
         }

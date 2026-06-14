@@ -484,6 +484,32 @@ final class AppModel {
         scheduleSave()
     }
 
+    /// Add a `folder` section joining every file under `relativePath`. Unlike
+    /// `file`, folders aren't deduped — the same tree can back two sections with
+    /// different gitignore settings.
+    func addFolderSection(relativePath: String, at index: Int? = nil) {
+        let title = (relativePath as NSString).lastPathComponent.uppercased()
+        insert(SpecSection(title: title.isEmpty ? "FOLDER" : title,
+                           kind: .folder(path: relativePath, useGitignore: true)),
+               at: index)
+    }
+
+    /// Point a `folder` section at a different folder, refreshing a still-default
+    /// title and keeping the gitignore choice.
+    func setFolderSection(_ id: UUID, relativePath: String) {
+        guard let i = spec.sections.firstIndex(where: { $0.id == id }),
+              case let .folder(oldPath, useGitignore) = spec.sections[i].kind
+        else { return }
+        var section = spec.sections[i]
+        let oldDefault = (oldPath as NSString).lastPathComponent.uppercased()
+        if section.title.isEmpty || section.title == oldDefault {
+            section.title = (relativePath as NSString).lastPathComponent.uppercased()
+        }
+        section.kind = .folder(path: relativePath, useGitignore: useGitignore)
+        spec.sections[i] = section
+        scheduleSave()
+    }
+
     func addTextSection(at index: Int? = nil) {
         insert(SpecSection(title: "NEW SECTION", kind: .text(source: .body(""))),
                at: index)
