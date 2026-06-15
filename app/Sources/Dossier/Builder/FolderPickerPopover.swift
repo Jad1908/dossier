@@ -25,6 +25,10 @@ struct FolderPickerPopover: View {
             SearchField(text: $search, placeholder: "Search folders")
                 .padding(.horizontal, Theme.Spacing.md)
                 .padding(.bottom, Theme.Spacing.sm)
+                // Enter validates the top match, so the keyboard alone can pick.
+                .onSubmit {
+                    if let first = folders.first { onPick(first.relativePath) }
+                }
 
             Divider().overlay(Theme.Colors.hairline)
 
