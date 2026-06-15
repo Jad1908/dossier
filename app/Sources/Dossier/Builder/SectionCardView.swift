@@ -290,6 +290,9 @@ private struct TextSectionBody: View {
                 selection: Binding(
                     get: { isInline },
                     set: { inline in
+                        // Ignore a tap on the segment that's already selected —
+                        // re-picking "Saved prompt" must not reset to the first.
+                        guard inline != isInline else { return }
                         if inline {
                             binding.kind = .text(source: .body(currentBody))
                         } else if hasPrompts {
@@ -310,7 +313,9 @@ private struct TextSectionBody: View {
                     .font(Theme.Typography.bodyMd)
                     .foregroundStyle(Theme.Colors.ink)
                     .scrollContentBackground(.hidden)
-                    .frame(minHeight: 96)
+                    // Grow with content up to a ceiling, then scroll internally
+                    // so a long body can't stretch the card without bound.
+                    .frame(minHeight: 96, maxHeight: 320)
                     .padding(Theme.Spacing.xs)
                     .surfaceTile(fill: Theme.Colors.surfaceElevated)
                     .focused($editing)
@@ -366,11 +371,19 @@ private struct TextSectionBody: View {
             set: { usePrompt($0) })
     }
 
-    /// Point the section at a saved prompt, defaulting the title to the prompt
-    /// name when the title is still the generic placeholder (change 3).
+    /// Point the section at a saved prompt, keeping the title in sync with the
+    /// prompt name (change 3). The title auto-follows the prompt while it's
+    /// still the generic placeholder or simply echoes the previously chosen
+    /// prompt — so cycling between prompts keeps renaming — but a title the user
+    /// has typed themselves is left untouched.
     private func usePrompt(_ name: String) {
         var updated = binding
-        if updated.title.isEmpty || updated.title == "NEW SECTION" {
+        let previousPrompt: String? = {
+            if case let .text(.prompt(n)) = binding.kind { return n }
+            return nil
+        }()
+        if updated.title.isEmpty || updated.title == "NEW SECTION"
+            || updated.title == previousPrompt {
             updated.title = name
         }
         updated.kind = .text(source: .prompt(name))
