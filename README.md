@@ -39,6 +39,25 @@ make run
 
 ---
 
+## Keyboard shortcuts
+
+Build prompts without leaving the keyboard. These work in the builder pane
+whenever you're **not** typing in a text field — press `?` any time for the
+full in-app cheat sheet.
+
+| Key | Action |
+| --- | --- |
+| `t` | Add a text section |
+| `⇧t` | Add a tree section |
+| `f` | Add a file section |
+| `⇧f` | Add a folder section |
+| `?` | Show the shortcuts cheat sheet |
+| `↑` / `↓` | Select the previous / next section |
+| `↩` | Edit the selected section |
+| `⌫` | Delete the selected section(s) |
+
+---
+
 ## License
 
 [MIT](LICENSE). Issues and pull requests welcome.
