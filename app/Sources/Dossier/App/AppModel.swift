@@ -431,6 +431,30 @@ final class AppModel {
         return spec.sections.count
     }
 
+    // MARK: - Keyboard-driven insert picker
+
+    /// Which picker a keyboard shortcut wants to open at the insert point.
+    enum InsertPickerKind: Equatable { case file, folder }
+
+    /// A request from the `f` / `⇧f` shortcuts for the `InsertDelimiter` at
+    /// `index` to open its file/folder picker — so the popover appears at the
+    /// "+ Add" pill where the new section will land. `token` makes repeat
+    /// requests at the same index distinct so `onChange` always fires.
+    struct InsertPickerRequest: Equatable {
+        let token = UUID()
+        let index: Int
+        let kind: InsertPickerKind
+    }
+
+    /// Set by a shortcut, consumed by the matching delimiter. Nil when idle.
+    var insertPickerRequest: InsertPickerRequest?
+
+    /// Ask the delimiter at the default insert point (after the selection, else
+    /// the end) to open `kind`'s picker.
+    func requestInsertPicker(_ kind: InsertPickerKind) {
+        insertPickerRequest = InsertPickerRequest(index: defaultInsertIndex, kind: kind)
+    }
+
     private func insert(_ section: SpecSection, at index: Int?) {
         let clamped = min(max(index ?? defaultInsertIndex, 0), spec.sections.count)
         withAnimation(Theme.Motion.bouncy) {

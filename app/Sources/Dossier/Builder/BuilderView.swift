@@ -8,6 +8,11 @@ struct BuilderView: View {
     @Binding var showPromptLibrary: Bool
     @FocusState private var listFocused: Bool
     @State private var showFolderPicker = false
+    @State private var showShortcuts = false
+    // Fallbacks for the empty state, where there are no cards (and so no inline
+    // "+ Add" delimiter) to anchor a keyboard-triggered picker on.
+    @State private var showEmptyFilePicker = false
+    @State private var showEmptyFolderPicker = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,6 +26,14 @@ struct BuilderView: View {
         }
         .animation(Theme.Motion.smooth, value: model.selectedSectionIDs)
         .background(Theme.Colors.surface)
+        // Jupyter-style command keys are caught in AppKit, not via SwiftUI
+        // focus: a key-window monitor runs them whenever the user isn't typing
+        // in a text field, so they fire regardless of which view holds focus
+        // (the .focusable() list was too fragile — keys leaked into title
+        // fields). See `handleCommandKey`.
+        .background(BuilderKeyMonitor(handle: handleCommandKey))
+        // Cheat sheet for the keyboard shortcuts, opened with `?`.
+        .sheet(isPresented: $showShortcuts) { ShortcutsCheatSheet() }
         // Pane-wide drop target (anywhere not claimed by a card/delimiter):
         // explorer file paths become `file` sections at the end; a section
         // payload (reorder drag that missed a specific target) moves to the end.
@@ -205,6 +218,65 @@ struct BuilderView: View {
         }
     }
 
+    // MARK: - AppKit command keys
+
+    /// Jupyter-style command keys, handled at the AppKit layer so they don't
+    /// depend on the SwiftUI list holding focus. Returns true when the event is
+    /// consumed. The whole scheme stands down while a text field is being edited
+    /// (`isEditingText`) so the keys reach the field instead — that is the
+    /// command-mode / edit-mode split.
+    ///
+    /// - `t` / `⇧t` add a text / tree section.
+    /// - `f` / `⇧f` open the file / folder picker at the "+ Add" pill where the
+    ///   new section will land (or a header-anchored fallback when empty).
+    /// - `?` shows the cheat sheet.
+    /// - `↑` / `↓` with nothing selected bootstrap a selection so navigation can
+    ///   start; once something is selected the SwiftUI list owns the arrows
+    ///   (including the ⌘/⇧/⌃ variants), so we leave those alone.
+    private func handleCommandKey(_ event: NSEvent) -> Bool {
+        guard model.currentSpecExists, !isEditingText else { return false }
+        // Only bare keys, optionally with Shift (which picks the structural
+        // variant of an add key). ⌘/⌃/⌥ combos belong to the menu and the
+        // SwiftUI list handlers, so leave them alone.
+        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard mods.subtracting(.shift).isEmpty else { return false }
+        let shift = mods.contains(.shift)
+
+        if event.characters == "?" { showShortcuts = true; return true }
+
+        switch event.charactersIgnoringModifiers?.lowercased() {
+        case "t": shift ? model.addTreeSection() : model.addTextSection(); return true
+        case "f": shift ? requestFolderPicker() : requestFilePicker(); return true
+        default:  return bootstrapArrow(event)
+        }
+    }
+
+    /// First ↑/↓ when nothing is selected: land on a section so the SwiftUI list
+    /// can take over. Skipped when the explorer's list owns the responder, so it
+    /// never steals the explorer's own arrow navigation.
+    private func bootstrapArrow(_ event: NSEvent) -> Bool {
+        guard model.selectedSectionIDs.isEmpty, !model.spec.sections.isEmpty,
+              !(NSApp.keyWindow?.firstResponder is NSTableView) else { return false }
+        switch event.keyCode {
+        case 126: model.moveSelectionCursor(up: true);  return true   // ↑ → last
+        case 125: model.moveSelectionCursor(up: false); return true   // ↓ → first
+        default:  return false
+        }
+    }
+
+    /// Open the file picker. Normally it rides the inline "+ Add" delimiter at the
+    /// insert point; with no sections there is no delimiter, so fall back to a
+    /// popover on the empty-state hint.
+    private func requestFilePicker() {
+        if model.spec.sections.isEmpty { showEmptyFilePicker = true }
+        else { model.requestInsertPicker(.file) }
+    }
+
+    private func requestFolderPicker() {
+        if model.spec.sections.isEmpty { showEmptyFolderPicker = true }
+        else { model.requestInsertPicker(.folder) }
+    }
+
     /// True while a text field/editor holds the window's first responder — i.e.
     /// the user is typing. Backed by AppKit because the clashing keys are caught
     /// by this view's greedy onKeyPress before the field would see them.
@@ -229,6 +301,78 @@ struct BuilderView: View {
         }
         .padding(Theme.Spacing.xl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // With no cards there is no "+ Add" delimiter to anchor on, so the f/⇧f
+        // shortcuts open their pickers here instead.
+        .overlay(alignment: .top) {
+            Color.clear
+                .frame(width: 1, height: 1)
+                .popover(isPresented: $showEmptyFilePicker, arrowEdge: .bottom) {
+                    FilePickerPopover { rel in
+                        model.addFileSection(relativePath: rel)
+                        showEmptyFilePicker = false
+                    } onPickExternal: { abs in
+                        model.addExternalFileSection(absolutePath: abs)
+                        showEmptyFilePicker = false
+                    }
+                    .environment(model)
+                }
+                .popover(isPresented: $showEmptyFolderPicker, arrowEdge: .bottom) {
+                    FolderPickerPopover { rel in
+                        model.addFolderSection(relativePath: rel)
+                        showEmptyFolderPicker = false
+                    }
+                    .environment(model)
+                }
+        }
+    }
+}
+
+// MARK: - AppKit key monitor
+
+/// Installs a key-window `keyDown` monitor for the builder's command keys. A
+/// monitor (rather than SwiftUI `.onKeyPress`) means the keys fire from any
+/// focus state, not only when a `.focusable()` view happens to hold focus.
+/// `handle` returns true to swallow the event.
+private struct BuilderKeyMonitor: NSViewRepresentable {
+    let handle: (NSEvent) -> Bool
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        context.coordinator.handle = handle
+        context.coordinator.install(view: view)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.handle = handle
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.remove()
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator {
+        var handle: ((NSEvent) -> Bool)?
+        private weak var view: NSView?
+        private var monitor: Any?
+
+        func install(view: NSView) {
+            self.view = view
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                // Only the key window's builder reacts — never a background
+                // window or the Settings panel.
+                guard let self, let window = self.view?.window, window.isKeyWindow,
+                      let handle = self.handle else { return event }
+                return handle(event) ? nil : event
+            }
+        }
+
+        func remove() {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+        }
     }
 }
 
