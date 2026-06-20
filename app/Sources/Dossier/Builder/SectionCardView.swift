@@ -583,6 +583,17 @@ struct InsertDelimiter: View {
             }
             .environment(model)
         }
+        // A keyboard shortcut (f / ⇧f) routes here so the picker opens at this
+        // "+ Add" pill — the one at the insert point — rather than off a hidden
+        // header anchor. Only the delimiter at the requested index reacts.
+        .onChange(of: model.insertPickerRequest) { _, request in
+            guard let request, request.index == index else { return }
+            switch request.kind {
+            case .file:   showFilePicker = true
+            case .folder: showFolderPicker = true
+            }
+            model.insertPickerRequest = nil
+        }
     }
 
     /// One row in the insert-choices popover.

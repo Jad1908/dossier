@@ -10,7 +10,7 @@ struct FileExplorerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SearchField(text: $search, placeholder: "Search files")
+            SearchField(text: $search, placeholder: "Search files", escapeClears: true)
                 .padding(Theme.Spacing.sm)
 
             Divider().overlay(Theme.Colors.hairline)
@@ -180,6 +180,10 @@ struct SearchField: View {
     /// Optional external focus binding so callers can drive the field's focus
     /// (e.g. to keep keyboard navigation alive while the user types).
     var focus: FocusState<Bool>.Binding? = nil
+    /// When true, Esc clears the text and resigns focus — stepping out of the
+    /// field. Left off for the picker popovers, where Esc should dismiss the
+    /// popover instead.
+    var escapeClears: Bool = false
 
     @FocusState private var localFocus: Bool
 
@@ -193,6 +197,12 @@ struct SearchField: View {
                 .font(Theme.Typography.bodyMd)
                 .foregroundStyle(Theme.Colors.ink)
                 .focused(focus ?? $localFocus)
+                .onKeyPress(.escape) {
+                    guard escapeClears else { return .ignored }
+                    text = ""
+                    (focus ?? $localFocus).wrappedValue = false
+                    return .handled
+                }
             if !text.isEmpty {
                 Button { text = "" } label: {
                     Image(systemName: "xmark.circle.fill").imageScale(.small)
