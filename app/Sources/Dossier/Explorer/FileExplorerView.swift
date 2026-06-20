@@ -177,6 +177,11 @@ struct FileRowContent: View {
 struct SearchField: View {
     @Binding var text: String
     var placeholder: String
+    /// Optional external focus binding so callers can drive the field's focus
+    /// (e.g. to keep keyboard navigation alive while the user types).
+    var focus: FocusState<Bool>.Binding? = nil
+
+    @FocusState private var localFocus: Bool
 
     var body: some View {
         HStack(spacing: Theme.Spacing.xs) {
@@ -187,6 +192,7 @@ struct SearchField: View {
                 .textFieldStyle(.plain)
                 .font(Theme.Typography.bodyMd)
                 .foregroundStyle(Theme.Colors.ink)
+                .focused(focus ?? $localFocus)
             if !text.isEmpty {
                 Button { text = "" } label: {
                     Image(systemName: "xmark.circle.fill").imageScale(.small)
