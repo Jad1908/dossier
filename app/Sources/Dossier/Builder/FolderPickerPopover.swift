@@ -6,6 +6,7 @@ import SwiftUI
 // folder. Mirrors FilePickerPopover, but lists directories rather than files.
 struct FolderPickerPopover: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
     let onPick: (String) -> Void
 
     @State private var search = ""
@@ -78,6 +79,13 @@ struct FolderPickerPopover: View {
         // A changing query reshuffles results, so snap the highlight back to
         // the top match each time the text changes.
         .onChange(of: search) { selection = 0 }
+        // Esc closes the picker. With the search field focused the popover
+        // won't dismiss itself — the field editor swallows the cancel — so
+        // catch the key on its way through the SwiftUI hierarchy.
+        .onKeyPress(.escape) {
+            dismiss()
+            return .handled
+        }
         .onAppear {
             // Focus the field after the popover settles so typing and arrow
             // navigation work immediately.

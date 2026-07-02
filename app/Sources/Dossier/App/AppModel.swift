@@ -63,8 +63,44 @@ final class AppModel {
     /// Lets Esc step out of the field and select that section (see BuilderView).
     private(set) var editingSectionID: UUID?
 
-    func beginEditing(_ id: UUID) { editingSectionID = id }
-    func endEditing(_ id: UUID) { if editingSectionID == id { editingSectionID = nil } }
+    /// Which of the section's fields holds the edit. When focus moves between
+    /// the title and the body of the *same* section, SwiftUI fires the two
+    /// focus onChanges in no guaranteed order — the old field's end can land
+    /// after the new field's begin. Scoping each begin/end pair to its field
+    /// keeps that stale end from wiping the fresh begin (which left Esc dead
+    /// while a field was plainly being edited).
+    enum EditingField { case title, body }
+    private var editingField: EditingField?
+
+    func beginEditing(_ id: UUID, field: EditingField) {
+        editingSectionID = id
+        editingField = field
+    }
+
+    func endEditing(_ id: UUID, field: EditingField) {
+        if editingSectionID == id, editingField == field {
+            editingSectionID = nil
+            editingField = nil
+        }
+    }
+
+    /// True while the explorer's filter field holds keyboard focus — the one
+    /// main-window text field that doesn't report begin/endEditing. The
+    /// builder's key handling must know typing there is intentional: without
+    /// this it would read that focus as a stray grant and reclaim the keys
+    /// mid-word (see BuilderView.handleCommandKey).
+    var explorerFilterFocused = false
+
+    /// Drop the editing marker when the section it points at no longer exists
+    /// (deleted, or the spec was reloaded) — the field vanished with its view,
+    /// so its focus onChange never fired to end the edit. Without this, Esc
+    /// would try to select a removed card.
+    private func pruneEditingState() {
+        guard let id = editingSectionID,
+              !spec.sections.contains(where: { $0.id == id }) else { return }
+        editingSectionID = nil
+        editingField = nil
+    }
 
     /// A pending "enter edit mode" request (Enter on a selected card). The
     /// matching card focuses its editor and then clears it.
@@ -131,6 +167,21 @@ final class AppModel {
 
     // MARK: - Keyboard navigation
 
+    /// A keyboard navigation or move just changed which card should be on
+    /// screen; the builder list scrolls it into view. Mouse selection never
+    /// sets this — clicking a card must not yank the scroll position. The
+    /// token keeps repeated requests for the same card distinct so the view's
+    /// onChange always fires.
+    struct ScrollRequest: Equatable {
+        let token = UUID()
+        let id: UUID
+    }
+    private(set) var scrollRequest: ScrollRequest?
+
+    private func requestScroll(to id: UUID) {
+        scrollRequest = ScrollRequest(id: id)
+    }
+
     /// ↑/↓: move the single selection to the previous/next card. With nothing
     /// selected, lands on the last/first card so the keyboard can take over.
     func moveSelectionCursor(up: Bool) {
@@ -142,6 +193,7 @@ final class AppModel {
             next = up ? spec.sections.count - 1 : 0
         }
         selectOnly(spec.sections[next].id)
+        requestScroll(to: spec.sections[next].id)
     }
 
     /// Shift+↑/↓: grow or shrink the range by one card from its moving end,
@@ -154,6 +206,7 @@ final class AppModel {
         }
         let nextIdx = up ? max(0, endIdx - 1) : min(spec.sections.count - 1, endIdx + 1)
         extendSelection(to: spec.sections[nextIdx].id)
+        requestScroll(to: spec.sections[nextIdx].id)
     }
 
     /// The cursor for keyboard moves: the anchor if it's still around, else the
@@ -380,6 +433,7 @@ final class AppModel {
         } else {
             spec = Spec()
         }
+        pruneEditingState()
     }
 
     /// Does the current folder have the selected spec on disk?
@@ -574,6 +628,7 @@ final class AppModel {
             selectedSectionIDs.remove(id)
             if selectionAnchor == id { selectionAnchor = nil }
         }
+        pruneEditingState()
         scheduleSave()
     }
 
@@ -584,6 +639,7 @@ final class AppModel {
             spec.sections.removeAll { selectedSectionIDs.contains($0.id) }
             clearSelection()
         }
+        pruneEditingState()
         scheduleSave()
     }
 
@@ -627,13 +683,19 @@ final class AppModel {
     /// Block-move the selection one slot earlier / later, keeping it together.
     func moveSelectionUp() {
         guard let top = selectedIndices.min(), top > 0 else { return }
+        let edge = spec.sections[top].id
         moveSections(ids: selectedSectionIDs, to: top - 1)
+        // Keep the moved block's leading card in view.
+        requestScroll(to: edge)
     }
 
     func moveSelectionDown() {
         guard let bottom = selectedIndices.max(),
               bottom < spec.sections.count - 1 else { return }
+        let edge = spec.sections[bottom].id
         moveSections(ids: selectedSectionIDs, to: bottom + 2)
+        // Keep the moved block's trailing card in view.
+        requestScroll(to: edge)
     }
 
     /// A binding to one section that re-renders on edit.
