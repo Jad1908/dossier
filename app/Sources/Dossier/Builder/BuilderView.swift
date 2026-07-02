@@ -144,45 +144,60 @@ struct BuilderView: View {
             // SwiftUI layout diffs in place and never touches the scroll offset.
             // Reordering is hand-rolled: the card's handle is draggable and
             // cards/delimiters are drop targets (see SectionDrag).
-            ScrollView {
-                VStack(spacing: Theme.Spacing.xs) {
-                    ForEach(model.spec.sections) { section in
-                        SectionCardView(sectionID: section.id)
-                        // A clear delimiter + accent "+" to insert after this card.
-                        InsertDelimiter(afterID: section.id)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: Theme.Spacing.xs) {
+                        ForEach(model.spec.sections) { section in
+                            SectionCardView(sectionID: section.id)
+                                .id(section.id)   // scroll anchor for keyboard navigation
+                            // A clear delimiter + accent "+" to insert after this card.
+                            InsertDelimiter(afterID: section.id)
+                        }
+                    }
+                    .padding(.vertical, Theme.Spacing.xs)
+                    .padding(.horizontal, Theme.Spacing.md)
+                }
+                // Keyboard navigation and moves keep the active card on screen.
+                // The nil anchor scrolls the minimum needed, so nothing shifts
+                // while the card is already fully visible; mouse selection never
+                // issues a request, so clicks can't yank the scroll position.
+                .onChange(of: model.scrollRequest) { _, request in
+                    guard let request else { return }
+                    withAnimation(Theme.Motion.smooth) {
+                        proxy.scrollTo(request.id, anchor: nil)
                     }
                 }
-                .padding(.vertical, Theme.Spacing.xs)
-                .padding(.horizontal, Theme.Spacing.md)
-            }
-            // All keyboard navigation lives in handleCommandKey (the AppKit
-            // monitor): the list itself is deliberately NOT .focusable() — a
-            // focusable ancestor makes SwiftUI silently refuse every
-            // programmatic focus write to the text fields inside it (Enter
-            // could never focus a card's editor while it was there).
-            .onChange(of: model.selectedSectionIDs) { _, ids in
-                guard !ids.isEmpty, isEditingText else { return }
-                // The selection changed while a text field holds focus. If the
-                // focus is the newly selected card's own editor (the click that
-                // selected the card landed in its field) or the explorer's
-                // filter (files added while typing a search), leave it alone.
-                // Otherwise the user clicked a *different* card while an old
-                // field — or a stray AppKit focus grant — still held the keys:
-                // step out so the keyboard follows the selection. Deferred a
-                // tick so the field's own focus onChange has settled first.
-                DispatchQueue.main.async {
-                    guard isEditingText, !model.explorerFilterFocused else { return }
-                    if let editing = model.editingSectionID, ids == [editing] { return }
-                    NSApp.keyWindow?.makeFirstResponder(nil)
+                // All keyboard navigation lives in handleCommandKey (the AppKit
+                // monitor): the list itself is deliberately NOT .focusable() — a
+                // focusable ancestor makes SwiftUI silently refuse every
+                // programmatic focus write to the text fields inside it (Enter
+                // could never focus a card's editor while it was there).
+                .onChange(of: model.selectedSectionIDs) { _, ids in
+                    guard !ids.isEmpty, isEditingText else { return }
+                    // The selection changed while a text field holds focus. If
+                    // the focus is the newly selected card's own editor (the
+                    // click that selected the card landed in its field) or the
+                    // explorer's filter (files added while typing a search),
+                    // leave it alone. Otherwise the user clicked a *different*
+                    // card while an old field — or a stray AppKit focus grant —
+                    // still held the keys: step out so the keyboard follows the
+                    // selection. Deferred a tick so the field's own focus
+                    // onChange has settled first.
+                    DispatchQueue.main.async {
+                        guard isEditingText, !model.explorerFilterFocused else { return }
+                        if let editing = model.editingSectionID, ids == [editing] { return }
+                        NSApp.keyWindow?.makeFirstResponder(nil)
+                    }
                 }
-            }
-            // Ctrl+Arrow while editing a field: jump between sections mid-edit.
-            // This onKeyPress fires because the focused field is a descendant;
-            // outside an edit the monitor consumes the key before it gets here.
-            .onKeyPress(keys: [.upArrow, .downArrow]) { press in
-                guard press.modifiers.contains(.control) else { return .ignored }
-                model.moveSelectionCursor(up: press.key == .upArrow)
-                return .handled
+                // Ctrl+Arrow while editing a field: jump between sections
+                // mid-edit. This onKeyPress fires because the focused field is
+                // a descendant; outside an edit the monitor consumes the key
+                // before it gets here.
+                .onKeyPress(keys: [.upArrow, .downArrow]) { press in
+                    guard press.modifiers.contains(.control) else { return .ignored }
+                    model.moveSelectionCursor(up: press.key == .upArrow)
+                    return .handled
+                }
             }
         }
     }

@@ -167,6 +167,21 @@ final class AppModel {
 
     // MARK: - Keyboard navigation
 
+    /// A keyboard navigation or move just changed which card should be on
+    /// screen; the builder list scrolls it into view. Mouse selection never
+    /// sets this — clicking a card must not yank the scroll position. The
+    /// token keeps repeated requests for the same card distinct so the view's
+    /// onChange always fires.
+    struct ScrollRequest: Equatable {
+        let token = UUID()
+        let id: UUID
+    }
+    private(set) var scrollRequest: ScrollRequest?
+
+    private func requestScroll(to id: UUID) {
+        scrollRequest = ScrollRequest(id: id)
+    }
+
     /// ↑/↓: move the single selection to the previous/next card. With nothing
     /// selected, lands on the last/first card so the keyboard can take over.
     func moveSelectionCursor(up: Bool) {
@@ -178,6 +193,7 @@ final class AppModel {
             next = up ? spec.sections.count - 1 : 0
         }
         selectOnly(spec.sections[next].id)
+        requestScroll(to: spec.sections[next].id)
     }
 
     /// Shift+↑/↓: grow or shrink the range by one card from its moving end,
@@ -190,6 +206,7 @@ final class AppModel {
         }
         let nextIdx = up ? max(0, endIdx - 1) : min(spec.sections.count - 1, endIdx + 1)
         extendSelection(to: spec.sections[nextIdx].id)
+        requestScroll(to: spec.sections[nextIdx].id)
     }
 
     /// The cursor for keyboard moves: the anchor if it's still around, else the
@@ -666,13 +683,19 @@ final class AppModel {
     /// Block-move the selection one slot earlier / later, keeping it together.
     func moveSelectionUp() {
         guard let top = selectedIndices.min(), top > 0 else { return }
+        let edge = spec.sections[top].id
         moveSections(ids: selectedSectionIDs, to: top - 1)
+        // Keep the moved block's leading card in view.
+        requestScroll(to: edge)
     }
 
     func moveSelectionDown() {
         guard let bottom = selectedIndices.max(),
               bottom < spec.sections.count - 1 else { return }
+        let edge = spec.sections[bottom].id
         moveSections(ids: selectedSectionIDs, to: bottom + 2)
+        // Keep the moved block's trailing card in view.
+        requestScroll(to: edge)
     }
 
     /// A binding to one section that re-renders on edit.
