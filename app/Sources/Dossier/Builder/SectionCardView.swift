@@ -149,14 +149,16 @@ struct SectionCardView: View {
                 .focused($titleFocused)
                 .onSubmit { titleFocused = false }
                 .onChange(of: titleFocused) { _, focused in
-                    if focused { model.beginEditing(sectionID) }
-                    else { model.endEditing(sectionID) }
+                    if focused { model.beginEditing(sectionID, field: .title) }
+                    else { model.endEditing(sectionID, field: .title) }
                 }
                 .onChange(of: model.editRequestID) { _, id in
                     // Only claim the request for kinds with no text body.
                     guard id == sectionID, !isInlineText else { return }
-                    titleFocused = true
                     model.consumeEditRequest(sectionID)
+                    // Deferred: a FocusState write during the update pass that
+                    // delivered this onChange gets dropped on macOS.
+                    DispatchQueue.main.async { titleFocused = true }
                 }
             Image(systemName: "pencil")
                 .font(.system(size: 10, weight: .semibold))
@@ -320,13 +322,15 @@ private struct TextSectionBody: View {
                     .surfaceTile(fill: Theme.Colors.surfaceElevated)
                     .focused($editing)
                     .onChange(of: editing) { _, focused in
-                        if focused { model.beginEditing(binding.id) }
-                        else { model.endEditing(binding.id) }
+                        if focused { model.beginEditing(binding.id, field: .body) }
+                        else { model.endEditing(binding.id, field: .body) }
                     }
                     .onChange(of: model.editRequestID) { _, id in
                         guard id == binding.id else { return }
-                        editing = true
                         model.consumeEditRequest(binding.id)
+                        // Deferred: a FocusState write during the update pass
+                        // that delivered this onChange gets dropped on macOS.
+                        DispatchQueue.main.async { editing = true }
                     }
             } else {
                 savedPromptPicker

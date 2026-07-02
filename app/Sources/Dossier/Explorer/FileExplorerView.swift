@@ -7,11 +7,31 @@ import SwiftUI
 struct FileExplorerView: View {
     @Environment(AppModel.self) private var model
     @State private var search = ""
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
-            SearchField(text: $search, placeholder: "Search files", escapeClears: true)
+            SearchField(text: $search, placeholder: "Search files",
+                        focus: $searchFocused, escapeClears: true)
                 .padding(Theme.Spacing.sm)
+                // The builder's command keys stand down while this field is
+                // focused; it can't tell from AppKit alone (the field doesn't
+                // report begin/endEditing like section fields do).
+                .onChange(of: searchFocused) { _, focused in
+                    model.explorerFilterFocused = focused
+                }
+                .onDisappear { model.explorerFilterFocused = false }
+                // The window hands initial keyboard focus to its first text
+                // field — this one — the moment it opens. Nobody asked for
+                // that, and while the field silently holds the keys every
+                // builder shortcut stands down (the reported "Enter/arrows do
+                // nothing after launch"). Drop the automatic grant; clicking
+                // the field still focuses it normally.
+                .onAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        if searchFocused { searchFocused = false }
+                    }
+                }
 
             Divider().overlay(Theme.Colors.hairline)
 
