@@ -234,6 +234,18 @@ struct BuilderView: View {
             // The explorer's filter is the one main-window field that doesn't
             // register as editing — typing there is intentional, stand down.
             if model.explorerFilterFocused { return false }
+            // A popover's text field (file/folder picker search, the New Spec
+            // name field) counts as editing too, but it never registers in
+            // editingSectionID. AppKit mirrors the popover's field editor as
+            // the anchoring window's firstResponder while key events still
+            // arrive addressed to the main window — so without this check the
+            // ghost-focus reclaim below would resign the popover's field on
+            // the FIRST keystroke and run the rest of the typing as commands.
+            // A real ghost grant is always an editor whose view lives in this
+            // window; an editor hosted in another window is intentional
+            // typing elsewhere — stand down.
+            if let focused = NSApp.keyWindow?.firstResponder as? NSView,
+               focused.window !== event.window { return false }
             // Ghost focus: AppKit handed the field editor out on its own
             // (typically to the first card's title when the window comes up or
             // a sheet closes) — no SwiftUI state accounts for it and the user
