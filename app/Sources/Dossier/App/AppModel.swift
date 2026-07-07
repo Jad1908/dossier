@@ -21,10 +21,20 @@ final class AppModel {
     // MARK: - Engine
 
     var engine: Engine?
-    var enginePathOverride: String? = Defaults.enginePathOverride {
-        didSet { Defaults.enginePathOverride = enginePathOverride; resolveEngine() }
-    }
     var engineMissing: Bool { engine == nil }
+
+    /// Every window has its own AppModel, so a change to the engine override
+    /// (Settings, or a window's missing-engine screen) can't just mutate one
+    /// model — it writes the shared default and broadcasts, and every model
+    /// re-resolves. Settings has no AppModel at all, so this is static.
+    static func setEngineOverride(_ path: String?) {
+        Defaults.enginePathOverride = path
+        NotificationCenter.default.post(name: .dossierEngineOverrideChanged, object: nil)
+    }
+
+    /// Kept for the lifetime of the model; the observer re-resolves the engine
+    /// (and re-renders) whenever any window or Settings changes the override.
+    @ObservationIgnored private var engineOverrideObserver: NSObjectProtocol?
 
     // MARK: - Project
 
@@ -290,10 +300,35 @@ final class AppModel {
 
     private var renderTask: Task<Void, Never>?
 
+    /// Only the model created at launch reopens the last project; a ⌘N window
+    /// starts on the welcome screen so it can hold a *different* project (two
+    /// windows silently editing the same spec would clobber each other's
+    /// debounced saves).
+    private static var didClaimLaunchReopen = false
+
     init() {
         Defaults.registerDefaults()
         resolveEngine()
-        reopenMostRecentProject()
+        engineOverrideObserver = NotificationCenter.default.addObserver(
+            forName: .dossierEngineOverrideChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.resolveEngine()
+                self?.render()
+            }
+        }
+        if !Self.didClaimLaunchReopen {
+            Self.didClaimLaunchReopen = true
+            reopenMostRecentProject()
+        }
+    }
+
+    deinit {
+        // Block-based observers are not auto-removed; without this a closed
+        // window's observer token would outlive its model.
+        if let engineOverrideObserver {
+            NotificationCenter.default.removeObserver(engineOverrideObserver)
+        }
     }
 
     /// Reopen the most recent project that still exists on launch — the usual
@@ -308,7 +343,7 @@ final class AppModel {
     }
 
     func resolveEngine() {
-        engine = Engine.locate(override: enginePathOverride)
+        engine = Engine.locate(override: Defaults.enginePathOverride)
     }
 
     // MARK: - Opening a project
@@ -623,24 +658,44 @@ final class AppModel {
 
 
     func removeSection(id: UUID) {
+        // The trash button only carries the selection over when this card WAS
+        // the sole selection — trashing an unselected card must not conjure a
+        // selection, and trashing one card of a multi-selection must not drop
+        // the rest of it.
+        let carrySelection = selectedSectionIDs == [id]
+        let index = spec.sections.firstIndex { $0.id == id }
         withAnimation(Theme.Motion.smooth) {
             spec.sections.removeAll { $0.id == id }
             selectedSectionIDs.remove(id)
             if selectionAnchor == id { selectionAnchor = nil }
+            if carrySelection, let index { selectAfterDeletion(at: index) }
         }
         pruneEditingState()
         scheduleSave()
     }
 
-    /// Delete every selected section at once.
+    /// Delete every selected section at once, then select the card that slid
+    /// up into the deleted block's place — so a keyboard delete flows straight
+    /// into navigating or deleting again without re-selecting by hand.
     func deleteSelection() {
         guard !selectedSectionIDs.isEmpty else { return }
+        let top = selectedIndices.min() ?? 0
         withAnimation(Theme.Motion.smooth) {
             spec.sections.removeAll { selectedSectionIDs.contains($0.id) }
             clearSelection()
+            selectAfterDeletion(at: top)
         }
         pruneEditingState()
         scheduleSave()
+    }
+
+    /// After a deletion at `index`, select the section now occupying that slot
+    /// (the one that was below), or the new last card when the deletion was at
+    /// the end. No scroll request: the slot is where the deleted card just was,
+    /// so it is already in view.
+    private func selectAfterDeletion(at index: Int) {
+        guard !spec.sections.isEmpty else { return }
+        selectOnly(spec.sections[min(index, spec.sections.count - 1)].id)
     }
 
     func moveSections(from offsets: IndexSet, to destination: Int) {
@@ -834,4 +889,10 @@ final class AppModel {
             }
         }
     }
+}
+
+extension Notification.Name {
+    /// The engine-path override changed (Settings or a missing-engine screen).
+    /// Every window's AppModel re-resolves its engine on this.
+    static let dossierEngineOverrideChanged = Notification.Name("dossierEngineOverrideChanged")
 }

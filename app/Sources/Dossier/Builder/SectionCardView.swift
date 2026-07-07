@@ -279,6 +279,14 @@ private struct TextSectionBody: View {
     @Binding var binding: SpecSection
     @FocusState private var editing: Bool
 
+    /// What the card held before flipping to "Saved prompt", restored when it
+    /// flips back — switching modes must not eat typed text. View state only:
+    /// the TOML schema stores body XOR prompt, so the stash never persists.
+    /// Nil until a flip happens this session (the card list is a plain VStack,
+    /// so the view — and the stash — live as long as the section does).
+    @State private var stashedBody: String?
+    @State private var stashedTitle: String?
+
     private var isInline: Bool {
         if case .text(.body) = binding.kind { return true }
         return false
@@ -296,8 +304,20 @@ private struct TextSectionBody: View {
                         // re-picking "Saved prompt" must not reset to the first.
                         guard inline != isInline else { return }
                         if inline {
-                            binding.kind = .text(source: .body(currentBody))
+                            var updated = binding
+                            // Undo usePrompt's auto-rename, but only while the
+                            // title still echoes the prompt — a title typed in
+                            // prompt mode is the user's and stays.
+                            if let stashedTitle,
+                               case let .text(.prompt(name)) = updated.kind,
+                               updated.title == name {
+                                updated.title = stashedTitle
+                            }
+                            updated.kind = .text(source: .body(stashedBody ?? ""))
+                            binding = updated
                         } else if hasPrompts {
+                            stashedBody = currentBody
+                            stashedTitle = binding.title
                             usePrompt(model.config.promptNames.first ?? "")
                         }
                         // With no saved prompts, "Saved prompt" is disabled and
