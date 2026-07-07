@@ -658,24 +658,44 @@ final class AppModel {
 
 
     func removeSection(id: UUID) {
+        // The trash button only carries the selection over when this card WAS
+        // the sole selection — trashing an unselected card must not conjure a
+        // selection, and trashing one card of a multi-selection must not drop
+        // the rest of it.
+        let carrySelection = selectedSectionIDs == [id]
+        let index = spec.sections.firstIndex { $0.id == id }
         withAnimation(Theme.Motion.smooth) {
             spec.sections.removeAll { $0.id == id }
             selectedSectionIDs.remove(id)
             if selectionAnchor == id { selectionAnchor = nil }
+            if carrySelection, let index { selectAfterDeletion(at: index) }
         }
         pruneEditingState()
         scheduleSave()
     }
 
-    /// Delete every selected section at once.
+    /// Delete every selected section at once, then select the card that slid
+    /// up into the deleted block's place — so a keyboard delete flows straight
+    /// into navigating or deleting again without re-selecting by hand.
     func deleteSelection() {
         guard !selectedSectionIDs.isEmpty else { return }
+        let top = selectedIndices.min() ?? 0
         withAnimation(Theme.Motion.smooth) {
             spec.sections.removeAll { selectedSectionIDs.contains($0.id) }
             clearSelection()
+            selectAfterDeletion(at: top)
         }
         pruneEditingState()
         scheduleSave()
+    }
+
+    /// After a deletion at `index`, select the section now occupying that slot
+    /// (the one that was below), or the new last card when the deletion was at
+    /// the end. No scroll request: the slot is where the deleted card just was,
+    /// so it is already in view.
+    private func selectAfterDeletion(at index: Int) {
+        guard !spec.sections.isEmpty else { return }
+        selectOnly(spec.sections[min(index, spec.sections.count - 1)].id)
     }
 
     func moveSections(from offsets: IndexSet, to destination: Int) {
