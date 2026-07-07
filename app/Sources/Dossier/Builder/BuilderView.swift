@@ -12,6 +12,12 @@ struct BuilderView: View {
     // "+ Add" delimiter) to anchor a keyboard-triggered picker on.
     @State private var showEmptyFilePicker = false
     @State private var showEmptyFolderPicker = false
+    // When the first `d` of the Jupyter-style `dd` delete chord was pressed,
+    // or nil while no chord is pending. Any other command key disarms it, and
+    // the second `d` must land within `deleteChordWindow` — both guards keep a
+    // long-forgotten stray `d` from turning a later one into a surprise delete.
+    @State private var deleteChordArmedAt: Date?
+    private let deleteChordWindow: TimeInterval = 1.0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -214,6 +220,7 @@ struct BuilderView: View {
     /// - `f` / `⇧f` open the file / folder picker at the "+ Add" pill where the
     ///   new section will land (or a header-anchored fallback when empty).
     /// - `?` shows the cheat sheet.
+    /// - `d` `d` (two quick presses) deletes the selection, like ⌫.
     /// - `↑` / `↓` (plain, ⇧, ⌘), Return, and ⌫/⌦ run the section navigation
     ///   here so a selected card is never keyboard-dead — the list's onKeyPress
     ///   handlers only fire when it truly holds focus, which requires the
@@ -260,6 +267,12 @@ struct BuilderView: View {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             .subtracting([.numericPad, .function])
 
+        // Every command-mode key disarms a pending `dd` chord; only the `d`
+        // case below re-arms it. Captured before the reset so the second `d`
+        // can still see the first press.
+        let deleteChordWasArmedAt = deleteChordArmedAt
+        if deleteChordArmedAt != nil { deleteChordArmedAt = nil }
+
         // Navigation keys, owned here rather than by the list's onKeyPress:
         // the .focusable() list only receives real focus while the system's
         // keyboard-navigation setting is on, so on a default macOS setup the
@@ -301,6 +314,18 @@ struct BuilderView: View {
         switch event.charactersIgnoringModifiers?.lowercased() {
         case "t": shift ? model.addTreeSection() : model.addTextSection(); return true
         case "f": shift ? requestFolderPicker() : requestFilePicker(); return true
+        case "d" where !shift:
+            // `dd` (notebook-style): two quick bare `d` presses delete the
+            // selection, mirroring ⌫. A lone `d` only arms the chord — it is
+            // still consumed so it can't leak anywhere as text.
+            guard !model.selectedSectionIDs.isEmpty else { return false }
+            if let armedAt = deleteChordWasArmedAt,
+               Date().timeIntervalSince(armedAt) < deleteChordWindow {
+                model.deleteSelection()
+            } else {
+                deleteChordArmedAt = Date()
+            }
+            return true
         default:  return false
         }
     }

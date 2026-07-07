@@ -55,6 +55,7 @@ full in-app cheat sheet.
 | `↑` / `↓` | Select the previous / next section |
 | `↩` | Edit the selected section |
 | `⌫` | Delete the selected section(s) |
+| `d` `d` | Delete the selected section(s) |
 
 ---
 
