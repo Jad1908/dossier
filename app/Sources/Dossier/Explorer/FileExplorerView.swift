@@ -16,41 +16,71 @@ struct FileExplorerView: View {
                 .padding(Theme.Spacing.sm)
                 // The builder's command keys stand down while this field is
                 // focused; it can't tell from AppKit alone (the field doesn't
-                // report begin/endEditing like section fields do).
+                // report begin/endEditing like section fields do). And AppKit
+                // hands this field — the window's first text field — the
+                // keyboard on its own: at window open, and whenever a popover
+                // or sheet the user drove with a shortcut closes and the
+                // window re-seats focus. Accept focus only when the current
+                // event shows the user asked for it; otherwise every builder
+                // shortcut typed afterwards lands here as search text.
                 .onChange(of: searchFocused) { _, focused in
+                    if focused, !focusIsUserDriven {
+                        // Deferred: a FocusState write during the update pass
+                        // that delivered this onChange gets dropped on macOS.
+                        DispatchQueue.main.async { searchFocused = false }
+                        return
+                    }
                     model.explorerFilterFocused = focused
                 }
                 .onDisappear { model.explorerFilterFocused = false }
-                // The window hands initial keyboard focus to its first text
-                // field — this one — the moment it opens. Nobody asked for
-                // that, and while the field silently holds the keys every
-                // builder shortcut stands down (the reported "Enter/arrows do
-                // nothing after launch"). Drop the automatic grant; clicking
-                // the field still focuses it normally.
+                // Belt for the startup grant, which can arrive before any
+                // event exists for the guard above to inspect.
                 .onAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        if searchFocused { searchFocused = false }
+                        if searchFocused, !model.explorerFilterFocused {
+                            searchFocused = false
+                        }
                     }
                 }
 
             Divider().overlay(Theme.Colors.hairline)
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 1) {
-                    if let root = model.fileTreeRoot {
-                        if search.isEmpty {
-                            ForEach(root.children ?? []) { node in
-                                FileNodeRow(node: node, depth: 0)
-                            }
-                        } else {
-                            searchResults(root: root.url)
-                        }
-                    }
-                }
-                .padding(Theme.Spacing.xs)
-            }
+            explorerTree
         }
         .background(Theme.Colors.canvas)
+    }
+
+    /// Did the user actually ask for the focus change being processed? A click
+    /// in this window (on the field) or Tab counts; a click inside a popover's
+    /// own window (its closing hands focus back) or any other key event is an
+    /// automatic AppKit grant the user never requested.
+    private var focusIsUserDriven: Bool {
+        guard let event = NSApp.currentEvent else { return false }
+        switch event.type {
+        case .leftMouseDown, .leftMouseUp:
+            return event.window === NSApp.keyWindow
+        case .keyDown:
+            return event.keyCode == 48   // Tab — keyboard navigation into the field
+        default:
+            return false
+        }
+    }
+
+    private var explorerTree: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 1) {
+                if let root = model.fileTreeRoot {
+                    if search.isEmpty {
+                        ForEach(root.children ?? []) { node in
+                            FileNodeRow(node: node, depth: 0)
+                        }
+                    } else {
+                        searchResults(root: root.url)
+                    }
+                }
+            }
+            .padding(Theme.Spacing.xs)
+        }
     }
 
     @ViewBuilder
