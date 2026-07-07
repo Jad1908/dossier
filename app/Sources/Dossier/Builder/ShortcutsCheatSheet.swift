@@ -35,6 +35,7 @@ struct ShortcutsCheatSheet: View {
             Shortcut(keys: ["↩"], label: "Edit selected section"),
             Shortcut(keys: ["⎋"], label: "Stop editing / clear selection"),
             Shortcut(keys: ["⌫"], label: "Delete selected section(s)"),
+            Shortcut(keys: ["D", "D"], label: "Delete selected section(s)"),
             Shortcut(keys: ["⌘", "↑/↓"], label: "Move section up / down"),
             Shortcut(keys: ["⌃", "↑/↓"], label: "Move while editing"),
         ]),
