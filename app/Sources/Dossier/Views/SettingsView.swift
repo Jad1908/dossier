@@ -53,8 +53,11 @@ private struct GeneralSettings: View {
 // MARK: - Engine
 
 private struct EngineSettings: View {
-    @Environment(AppModel.self) private var model
+    // The Settings window is its own scene with no AppModel (each window owns
+    // one); it resolves the engine locally for the status row and broadcasts
+    // override changes via AppModel.setEngineOverride so every window follows.
     @State private var path = Defaults.enginePathOverride ?? ""
+    @State private var engine = Engine.locate(override: Defaults.enginePathOverride)
 
     var body: some View {
         SettingsForm {
@@ -77,7 +80,7 @@ private struct EngineSettings: View {
                 }
 
                 SettingsRow(label: "Status") {
-                    if let engine = model.engine {
+                    if let engine {
                         Label(engine.binaryURL.path, systemImage: "checkmark.circle.fill")
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.success)
@@ -92,17 +95,22 @@ private struct EngineSettings: View {
                 HStack {
                     Spacer()
                     Button("Re-detect") {
-                        model.enginePathOverride = nil
                         path = ""
+                        applyOverride(nil)
                     }
                     .buttonStyle(SecondaryButtonStyle())
                     Button("Apply") {
-                        model.enginePathOverride = path.isEmpty ? nil : path
+                        applyOverride(path.isEmpty ? nil : path)
                     }
                     .buttonStyle(PrimaryButtonStyle())
                 }
             }
         }
+    }
+
+    private func applyOverride(_ override: String?) {
+        AppModel.setEngineOverride(override)
+        engine = Engine.locate(override: override)
     }
 
     private func browse() {
@@ -143,7 +151,8 @@ private struct PreviewSettings: View {
 // MARK: - About
 
 private struct AboutSettings: View {
-    @Environment(AppModel.self) private var model
+    // Resolved locally — the Settings scene has no AppModel (one per window).
+    @State private var engine = Engine.locate(override: Defaults.enginePathOverride)
 
     private var version: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
@@ -167,7 +176,7 @@ private struct AboutSettings: View {
                 .foregroundStyle(Theme.Colors.body)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 360)
-            if let engine = model.engine {
+            if let engine {
                 Text(engine.binaryURL.path)
                     .font(Theme.Typography.mono)
                     .foregroundStyle(Theme.Colors.mute)

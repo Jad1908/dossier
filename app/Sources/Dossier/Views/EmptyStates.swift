@@ -54,7 +54,6 @@ struct WelcomeView: View {
 
 /// The `dossier` binary could not be located (DESKTOP_APP_SPEC §10).
 struct MissingEngineView: View {
-    @Environment(AppModel.self) private var model
     @State private var path = Defaults.enginePathOverride ?? ""
 
     var body: some View {
@@ -80,7 +79,8 @@ struct MissingEngineView: View {
                     .buttonStyle(TertiaryButtonStyle())
             }
             Button("Use This Path") {
-                model.enginePathOverride = path.isEmpty ? nil : path
+                // Broadcast: every window's model re-resolves, not just this one's.
+                AppModel.setEngineOverride(path.isEmpty ? nil : path)
             }
             .buttonStyle(PrimaryButtonStyle())
         }
