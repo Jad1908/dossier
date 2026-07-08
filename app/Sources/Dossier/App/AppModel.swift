@@ -357,6 +357,7 @@ final class AppModel {
         fileTreeRoot = FileNode(url: url, isDirectory: true, projectRoot: url)
         fileTreeRoot?.loadChildrenIfNeeded()
         watchProjectFiles(url)
+        refreshGitStatus()
         refreshSpecList()
         // Prefer the default spec if present, else the first discovered one.
         currentSpec = availableSpecs.first { $0.name == nil }
@@ -492,7 +493,12 @@ final class AppModel {
     /// in-app actions, refreshing the explorer when they do.
     private func watchProjectFiles(_ url: URL) {
         fileWatcher = FileSystemWatcher(url: url) { [weak self] in
-            MainActor.assumeIsolated { self?.reloadFileTree() }
+            MainActor.assumeIsolated {
+                self?.reloadFileTree()
+                // .git is under the watched root, so terminal-side checkouts
+                // and commits land here too and keep the branch bar honest.
+                self?.refreshGitStatus()
+            }
         }
     }
 
@@ -501,6 +507,94 @@ final class AppModel {
     /// added inside an expanded subfolder surface, not just root-level ones.
     func reloadFileTree() {
         fileTreeRoot?.reloadLoadedChildren()
+    }
+
+    // MARK: - Git branch state
+
+    /// The repo state behind the explorer's branch bar. Nil hides the bar
+    /// entirely: the open folder isn't a git work tree, or git can't run.
+    private(set) var gitStatus: GitSnapshot?
+
+    /// Snapshot requests race (open project, watcher bursts, post-checkout
+    /// refresh); only the newest may publish — same idea as `renderGeneration`.
+    @ObservationIgnored private var gitStatusGeneration = 0
+
+    /// Re-read the repo state off the main thread and publish it. Cheap enough
+    /// to run on every coalesced FS event: that is also what keeps the bar in
+    /// sync with checkouts and commits made from a terminal.
+    func refreshGitStatus() {
+        guard let projectURL else {
+            if gitStatus != nil { gitStatus = nil }
+            return
+        }
+        gitStatusGeneration += 1
+        let generation = gitStatusGeneration
+        Task.detached(priority: .utility) {
+            let snapshot = GitClient.snapshot(at: projectURL)
+            await MainActor.run {
+                guard self.gitStatusGeneration == generation else { return }
+                // @Observable notifies on every write — skip the no-op
+                // refreshes unrelated disk activity triggers via the watcher.
+                if self.gitStatus != snapshot { self.gitStatus = snapshot }
+            }
+        }
+    }
+
+    /// Check out `branch` (the branch bar's pick). Runs git off the main
+    /// thread, then reloads everything the checkout rewrote on disk.
+    func switchBranch(to branch: GitBranch) {
+        performGitSwitch(to: branch.localName) { GitClient.checkout(branch, at: $0) }
+    }
+
+    /// Create `name` at HEAD and switch to it (the picker's create row).
+    func createBranch(named name: String) {
+        performGitSwitch(to: name) { GitClient.createBranch(named: name, at: $0) }
+    }
+
+    private func performGitSwitch(to name: String,
+                                  _ operation: @escaping @Sendable (URL) -> String?) {
+        guard let projectURL else { return }
+        // Flush a pending debounced edit first, or the checkout would carry
+        // the last ~300 ms of typing onto the new branch's file — or lose it
+        // to the reload below. Only when a save is actually pending: an
+        // unconditional write would reserialize (and so dirty) an untouched
+        // spec on every switch.
+        renderTask?.cancel()
+        if saveIsPending { persistSpec() }
+        Task.detached(priority: .userInitiated) {
+            let failure = operation(projectURL)
+            await MainActor.run { self.finishBranchSwitch(to: name, failure: failure) }
+        }
+    }
+
+    private func finishBranchSwitch(to name: String, failure: String?) {
+        refreshGitStatus()   // even a failed checkout can move state
+        guard failure == nil else {
+            presentGitAlert(failure!)
+            return
+        }
+        // The checkout rewrote the working tree under us: rediscover the
+        // specs, fall back like openProject when the current one is gone on
+        // the new branch, and re-render.
+        refreshSpecList()
+        if !availableSpecs.contains(currentSpec) {
+            currentSpec = availableSpecs.first { $0.name == nil }
+                ?? availableSpecs.first
+                ?? SpecRef(name: nil)
+        }
+        clearSelection()
+        loadSpecAndConfig()
+        reloadFileTree()
+        render()
+        flashStatus("On \(name)")
+    }
+
+    private func presentGitAlert(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Could not switch branch"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.runModal()
     }
 
     // MARK: - SpecSection mutations (all autosave + re-render)
@@ -779,10 +873,16 @@ final class AppModel {
 
     // MARK: - Persistence + render
 
+    /// True from the moment an edit schedules a save until the spec is written.
+    /// `renderTask` can't stand in for this: it stays non-nil after finishing,
+    /// so it can't distinguish "debounce still pending" from "already saved".
+    @ObservationIgnored private var saveIsPending = false
+
     /// Debounced (~300 ms): write the spec to disk, then re-render. The write is
     /// the same one that persists the user's edits — there is no separate save
     /// (DESKTOP_APP_SPEC §8).
     func scheduleSave() {
+        saveIsPending = true
         renderTask?.cancel()
         renderTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 300_000_000)
@@ -793,6 +893,7 @@ final class AppModel {
     }
 
     func persistSpec() {
+        saveIsPending = false
         guard let url = specURL(for: currentSpec) else { return }
         try? SpecIO.writeSpec(spec, to: url)
     }
