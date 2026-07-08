@@ -46,6 +46,10 @@ struct FileExplorerView: View {
             Divider().overlay(Theme.Colors.hairline)
 
             explorerTree
+
+            // The current git branch, VS Code's bottom-left spot. Renders
+            // nothing when the folder isn't a repo.
+            GitBranchBar()
         }
         .background(Theme.Colors.canvas)
     }
