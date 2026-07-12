@@ -65,11 +65,24 @@ struct MissingEngineView: View {
                 .font(Theme.Typography.headingLg)
                 .foregroundStyle(Theme.Colors.ink)
             Text("Dossier needs the `dossier` command-line tool on your PATH. "
-                 + "Install it (uv tool install …) or point to it manually below.")
+                 + "Install it by running:")
                 .font(Theme.Typography.bodyMd)
                 .foregroundStyle(Theme.Colors.mute)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 460)
+            Text(verbatim: "uv tool install git+https://github.com/Jad1908/dossier.git")
+                .font(Theme.Typography.mono)
+                .foregroundStyle(Theme.Colors.ink)
+                .textSelection(.enabled)
+                .padding(.horizontal, Theme.Spacing.md)
+                .padding(.vertical, Theme.Spacing.sm)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.Radius.md, style: .continuous)
+                        .fill(Theme.Colors.accentSoft.opacity(0.5))
+                )
+            Text("…or point to an existing binary manually below.")
+                .font(Theme.Typography.bodyMd)
+                .foregroundStyle(Theme.Colors.mute)
 
             HStack(spacing: Theme.Spacing.sm) {
                 TextField("/path/to/dossier", text: $path)
