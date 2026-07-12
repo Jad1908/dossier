@@ -29,6 +29,19 @@ curl -fsSL https://raw.githubusercontent.com/Jad1908/dossier/main/install.sh | s
 Requires macOS 14 (Sonoma) or newer. On Intel, build from source — see
 [`app/README.md`](app/README.md).
 
+### CLI engine only
+
+The app shells out to the `dossier` command-line engine. The installer above
+sets it up for you, but you can also install it on its own with
+[uv](https://docs.astral.sh/uv/):
+
+```sh
+uv tool install git+https://github.com/Jad1908/dossier.git
+```
+
+This puts the `dossier` command on your PATH (`~/.local/bin`). To update it
+later, run `uv tool upgrade dossier`.
+
 ## Launch the app
 
 
