@@ -36,6 +36,13 @@ final class AppModel {
     /// (and re-renders) whenever any window or Settings changes the override.
     @ObservationIgnored private var engineOverrideObserver: NSObjectProtocol?
 
+    /// Re-checks for the engine when the app returns to the foreground, so
+    /// running `uv tool install` in a terminal dismisses the missing-engine
+    /// screen without a relaunch. Guarded to only probe while the engine is
+    /// actually missing — resolving spawns a login shell, too costly to run
+    /// on every activation.
+    @ObservationIgnored private var appActivationObserver: NSObjectProtocol?
+
     // MARK: - Project
 
     private(set) var projectURL: URL?
@@ -317,6 +324,15 @@ final class AppModel {
                 self?.render()
             }
         }
+        appActivationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.engineMissing else { return }
+                self.resolveEngine()
+                if !self.engineMissing { self.render() }
+            }
+        }
         if !Self.didClaimLaunchReopen {
             Self.didClaimLaunchReopen = true
             reopenMostRecentProject()
@@ -328,6 +344,9 @@ final class AppModel {
         // window's observer token would outlive its model.
         if let engineOverrideObserver {
             NotificationCenter.default.removeObserver(engineOverrideObserver)
+        }
+        if let appActivationObserver {
+            NotificationCenter.default.removeObserver(appActivationObserver)
         }
     }
 

@@ -20,35 +20,28 @@ Read the story: [JaaS — Juniors as a Service](https://medium.com/@cafc.aouad.j
 
 ## Install
 
-Apple Silicon, one command:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/Jad1908/dossier/main/install.sh | sh
-```
-
-Requires macOS 14 (Sonoma) or newer. On Intel, build from source — see
-[`app/README.md`](app/README.md).
-
-### CLI engine only
-
-The app shells out to the `dossier` command-line engine. The installer above
-sets it up for you, but you can also install it on its own with
+Clone the repo and install the `dossier` CLI engine with
 [uv](https://docs.astral.sh/uv/):
 
 ```sh
-uv tool install git+https://github.com/Jad1908/dossier.git
+git clone https://github.com/Jad1908/dossier.git
+cd dossier
+uv tool install .
 ```
 
-This puts the `dossier` command on your PATH (`~/.local/bin`). To update it
-later, run `uv tool upgrade dossier`.
+This puts the `dossier` command on your PATH (`~/.local/bin`). The app shells
+out to it for every preview. To update it later, pull and run
+`uv tool install --force .`.
 
 ## Launch the app
-
 
 ```sh
 cd app
 make run
 ```
+
+Requires macOS 14 (Sonoma) or newer and a Swift toolchain (the Xcode Command
+Line Tools are enough). See [`app/README.md`](app/README.md) for details.
 
 ---
 
