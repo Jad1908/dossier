@@ -20,6 +20,11 @@ struct ContentView: View {
                 } else if !model.hasProject {
                     WelcomeView()
                         .transition(.opacity)
+                } else if !model.hasAnySpec {
+                    // No spec on disk: the project view (and with it every way
+                    // to edit one) stays unmounted until a spec is created.
+                    CreateSpecGateView()
+                        .transition(.opacity)
                 } else {
                     projectView
                         .transition(.opacity)
@@ -27,6 +32,7 @@ struct ContentView: View {
             }
             .animation(Theme.Motion.gentle, value: model.hasProject)
             .animation(Theme.Motion.gentle, value: model.engineMissing)
+            .animation(Theme.Motion.gentle, value: model.hasAnySpec)
             .background(Theme.Colors.canvas)
         }
         .preferredColorScheme(preferredScheme)
@@ -77,7 +83,9 @@ struct ContentView: View {
         ToolbarItem(placement: .navigation) {
             ProjectMenu()
         }
-        if model.hasProject {
+        // While the create-spec gate is up, the spec switcher and output
+        // actions vanish with the project view — the gate is the only surface.
+        if model.hasProject && model.hasAnySpec {
             ToolbarItem(placement: .principal) {
                 SpecSwitcher()
             }

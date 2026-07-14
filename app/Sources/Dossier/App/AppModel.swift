@@ -402,7 +402,10 @@ final class AppModel {
     }
 
     func refreshSpecList() {
-        guard let dossierURL else { availableSpecs = []; return }
+        guard let dossierURL else {
+            if !availableSpecs.isEmpty { availableSpecs = [] }
+            return
+        }
         let fm = FileManager.default
         let entries = (try? fm.contentsOfDirectory(atPath: dossierURL.path)) ?? []
         var refs: [SpecRef] = []
@@ -414,10 +417,18 @@ final class AppModel {
                 if !middle.isEmpty { refs.append(SpecRef(name: String(middle))) }
             }
         }
-        availableSpecs = refs.sorted {
+        let sorted = refs.sorted {
             ($0.name ?? "") .localizedCaseInsensitiveCompare($1.name ?? "") == .orderedAscending
         }
+        // @Observable notifies on every write — this now runs on each coalesced
+        // FS event (syncSpecsFromDisk), so skip the no-op refreshes.
+        if availableSpecs != sorted { availableSpecs = sorted }
     }
+
+    /// Whether the open folder has any spec on disk at all. False blocks the
+    /// whole project view behind CreateSpecGateView: nothing (explorer adds,
+    /// drops, shortcuts) may touch a spec before one exists.
+    var hasAnySpec: Bool { !availableSpecs.isEmpty }
 
     func specURL(for ref: SpecRef) -> URL? {
         dossierURL?.appendingPathComponent(ref.fileName)
@@ -514,10 +525,47 @@ final class AppModel {
         fileWatcher = FileSystemWatcher(url: url) { [weak self] in
             MainActor.assumeIsolated {
                 self?.reloadFileTree()
+                // Specs created or deleted outside the app (a terminal-side
+                // `dossier init`, `rm`, …) must lift or restore the create-spec
+                // gate without a manual refresh.
+                self?.syncSpecsFromDisk()
                 // .git is under the watched root, so terminal-side checkouts
                 // and commits land here too and keep the branch bar honest.
                 self?.refreshGitStatus()
             }
+        }
+    }
+
+    /// Reconcile the spec list with disk changes made outside the app (a
+    /// terminal-side `dossier init`, `rm`, …). In-app writes are a no-op here:
+    /// createSpec/deleteSpec already refreshed the list, and persistSpec never
+    /// changes membership. Membership is compared before/after — never
+    /// `currentSpecExists`, which reads the disk NOW and so can't tell "just
+    /// appeared, never loaded" apart from "was always there".
+    private func syncSpecsFromDisk() {
+        // Flush a pending debounced edit first: it recreates the current
+        // spec's file if an external delete raced it, and the reconciliation
+        // below must see the post-flush disk state — otherwise the fallback
+        // would yank the user off a spec they are mid-edit in.
+        if saveIsPending { persistSpec() }
+        let before = availableSpecs
+        refreshSpecList()
+        guard availableSpecs != before else { return }
+        if availableSpecs.contains(currentSpec) {
+            // Another spec was added/removed while the current one stayed on
+            // disk: leave the editor alone — reloading would clobber the
+            // in-memory state. But if the current spec's file just APPEARED
+            // (the create gate was up, or the NoSpec fallback showed), it was
+            // never loaded: do so now so the gate lifts onto live content.
+            guard !before.contains(currentSpec) else { return }
+            switchSpec(to: currentSpec)
+        } else {
+            // The current spec's file is gone: fall back like openProject.
+            // With nothing left this reloads an empty spec and the create
+            // gate takes the window back.
+            switchSpec(to: availableSpecs.first { $0.name == nil }
+                ?? availableSpecs.first
+                ?? SpecRef(name: nil))
         }
     }
 
