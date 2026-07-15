@@ -110,7 +110,59 @@ struct MissingEngineView: View {
     }
 }
 
-/// The folder is open but the selected spec doesn't exist yet (§10).
+/// The folder is open but holds no spec at all. Blocks the entire window —
+/// ContentView never mounts the three-pane project view while this shows, so
+/// explorer adds, drops, and shortcuts simply don't exist yet. Creating a spec
+/// is the only way forward.
+struct CreateSpecGateView: View {
+    @Environment(AppModel.self) private var model
+    @State private var name = ""
+
+    var body: some View {
+        VStack(spacing: Theme.Spacing.lg) {
+            Image(systemName: "doc.badge.plus")
+                .font(.system(size: 44, weight: .light))
+                .foregroundStyle(Theme.Colors.accentText)
+            Text("No spec in \(model.projectURL?.lastPathComponent ?? "this folder") yet")
+                .font(Theme.Typography.headingLg)
+                .foregroundStyle(Theme.Colors.ink)
+            Text("Dossier builds prompts from a context.toml spec. "
+                 + "Create one to start working in this folder.")
+                .font(Theme.Typography.bodyMd)
+                .foregroundStyle(Theme.Colors.mute)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
+            HStack(spacing: Theme.Spacing.sm) {
+                TextField("Spec name (blank = default context.toml)", text: $name)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 300)
+                    .onSubmit(create)
+                Button("Create Spec", action: create)
+                    .buttonStyle(PrimaryButtonStyle())
+            }
+            .padding(.top, Theme.Spacing.sm)
+        }
+        .padding(Theme.Spacing.xxl)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            Theme.Colors.accentSoft.opacity(0.5)
+                .frame(maxWidth: 520, maxHeight: 360)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.xl, style: .continuous))
+        )
+    }
+
+    private func create() {
+        // No name-taken check: the gate only shows while the folder has no
+        // spec at all, so any target file is necessarily free.
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        model.createSpec(named: trimmed.isEmpty ? nil : trimmed)
+        name = ""
+    }
+}
+
+/// The folder is open but the selected spec doesn't exist yet (§10). With the
+/// create gate above, this is only reachable transiently — e.g. the current
+/// spec's file vanished on disk an instant before the watcher falls back.
 struct NoSpecView: View {
     @Environment(AppModel.self) private var model
 
